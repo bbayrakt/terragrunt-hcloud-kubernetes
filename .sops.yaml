@@ -1,0 +1,35 @@
+# SOPS configuration file
+# This file defines encryption rules for different file patterns
+
+# Default configuration using age
+# To use age, you need to:
+# 1. Install age: https://github.com/FiloSottile/age
+# 2. Generate a key: age-keygen -o keys.txt
+# 3. Set the SOPS_AGE_KEY_FILE environment variable or use the key directly
+
+creation_rules:
+  # Encrypt all secrets.yaml files using age
+  - path_regex: secrets\.yaml$
+    age: >-
+      age15ua6rtpkgylqj7x8ay6zs28tktelnlldc03k69296kv3sd70zexs2v2369
+    # Alternatively, use multiple keys for redundancy:
+    # age: >-
+    #   age1key1...,
+    #   age2key2...
+
+  # Example: Use PGP for specific environments
+  # - path_regex: environments/production/.*secrets\.yaml$
+  #   pgp: >-
+  #     YOUR_PGP_FINGERPRINT_HERE
+
+  # Example: Use AWS KMS for production
+  # - path_regex: environments/production/.*secrets\.yaml$
+  #   kms: arn:aws:kms:us-east-1:123456789012:key/xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+  # Example: Use GCP KMS
+  # - path_regex: environments/production/.*secrets\.yaml$
+  #   gcp_kms: projects/myproject/locations/global/keyRings/mykeyring/cryptoKeys/mykey
+
+  # Example: Use Azure Key Vault
+  # - path_regex: environments/production/.*secrets\.yaml$
+  #   azure_keyvault: https://myvault.vault.azure.net/keys/mykey/version

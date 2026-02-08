@@ -1,5 +1,9 @@
-.terraform.lock.hcl
-kubeconfig*
-talosconfig*
+**/.terraform.lock.hcl
+**/.terragrunt-cache/
 *.tfstate*
 *.terraform/
+
+kubeconfig*
+talosconfig*
+
+keys.txt
