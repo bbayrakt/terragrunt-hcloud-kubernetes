@@ -25,6 +25,15 @@ inputs = {
   # Cilium Gateway API
   cilium_gateway_api_enabled = true
 
+  # Talos Backup
+  talos_backup_s3_enabled     = true
+  talos_backup_s3_region      = "us-east-1"
+  talos_backup_s3_endpoint    = local.secrets.minio_endpoint
+  talos_backup_s3_bucket      = "talos-backup"
+  talos_backup_s3_path_style  = false  # false for MinIO (S3-like endpoint), true for AWS S3
+  talos_backup_s3_access_key  = local.secrets.minio_access_key
+  talos_backup_s3_secret_key  = local.secrets.minio_secret_key
+
   cluster_delete_protection = true
 
   # At least 3 control plane nodes are recommended for production clusters for high availability
