@@ -14,10 +14,17 @@ terraform {
   source = "../../../modules/kubernetes-cluster"
 }
 
+# Override kubeconfig paths to save in environment directory instead of cache
+locals {
+  env_dir = dirname(find_in_parent_folders("env.hcl"))
+}
+
 # Module inputs - loaded from env.hcl through include
 inputs = merge(
   include.env.inputs,
   {
-    # Override or add module-specific variables here if needed
+    # Override kubeconfig and talosconfig to save in environment directory
+    cluster_kubeconfig_path  = "${local.env_dir}/kubeconfig"
+    cluster_talosconfig_path = "${local.env_dir}/talosconfig"
   }
 )

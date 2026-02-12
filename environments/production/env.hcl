@@ -15,10 +15,6 @@ inputs = {
   cluster_name = "k8s-production"
   hcloud_token = local.secrets.hcloud_token
 
-  # Export configs for talosctl and kubectl
-  cluster_kubeconfig_path  = "kubeconfig"
-  cluster_talosconfig_path = "talosconfig"
-
   # Enable Cert Manager
   cert_manager_enabled = true
 
