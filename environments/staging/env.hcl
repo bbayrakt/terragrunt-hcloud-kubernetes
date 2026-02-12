@@ -24,6 +24,7 @@ inputs = {
 
   # Cilium Gateway API
   cilium_gateway_api_enabled = true
+  cilium_gateway_api_proxy_protocol_enabled = false  # Disabled due to IPv6 bug: https://github.com/cilium/cilium/issues/42950
 
   # Talos Backup
   talos_backup_s3_enabled     = true
@@ -65,4 +66,95 @@ inputs = {
       labels   = { "autoscaler-node" = "true" }
     }
   ]
+
+  # ==================== Gateway API Configuration ====================
+  
+  lb_name     = local.secrets.gateway_api_lb_name
+  lb_location = "nbg1"
+  lb_type     = "lb11"
+  lb_uses_proxyprotocol = false  # Disable proxy protocol for now
+
+  # Gateway Listeners - configure for your domains
+  gateway_listeners = [
+    {
+      name     = "https-example"
+      hostname = local.secrets.gateway_api_domain
+      port     = 443
+      protocol = "HTTPS"
+      allowedRoutes = {
+        namespaces = {
+          from = "All"
+        }
+      }
+      tls = {
+        mode = "Terminate"
+        certificateRefs = [
+          {
+            name  = "example-tls"
+            kind  = "Secret"
+            group = ""
+          }
+        ]
+      }
+    },
+    {
+      name     = "http-example"
+      hostname = local.secrets.gateway_api_domain
+      port     = 80
+      protocol = "HTTP"
+      allowedRoutes = {
+        namespaces = {
+          from = "All"
+        }
+      }
+    }
+  ]
+
+  # HTTPRoutes - configure your service routes
+  http_routes = {
+    "example-https" = {
+      name         = "example"
+      namespace    = "default"
+      section_name = "https-example"
+      hostnames    = [local.secrets.gateway_api_domain]
+      rules = [
+        {
+          backendRefs = [
+            {
+              name = "example-service"
+              port = 80
+            }
+          ]
+        }
+      ]
+    }
+    "example-redirect" = {
+      name         = "example-redirect"
+      namespace    = "default"
+      section_name = "http-example"
+      hostnames    = [local.secrets.gateway_api_domain]
+      rules = [
+        {
+          filters = [
+            {
+              type = "RequestRedirect"
+              requestRedirect = {
+                scheme     = "https"
+                statusCode = 301
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  # ==================== External DNS Configuration ====================
+
+  external_dns_enabled        = true
+  external_dns_version        = "1.20.0"
+  external_dns_provider       = "cloudflare"
+  external_dns_cluster_name   = "k8s-staging"
+  cloudflare_api_token        = local.secrets.cloudflare_api_token
+  external_dns_helm_values    = {}
 }
