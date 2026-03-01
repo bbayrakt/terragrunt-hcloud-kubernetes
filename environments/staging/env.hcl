@@ -2,8 +2,8 @@
 # This file contains all input variables for all modules in the staging environment
 
 locals {
-  environment_name = "staging"
-  secrets          = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+  base_domain               = local.secrets.gateway_api_domain
+  wildcard_domain           = "*.${local.environment_name}.${local.base_domain}"
 }
 
 inputs = {
@@ -75,8 +75,8 @@ inputs = {
 
   gateway_listeners = [
     {
-      name     = "https-example"
-      hostname = local.secrets.gateway_api_domain
+      name     = "https-wildcard"
+      hostname = local.wildcard_domain
       port     = 443
       protocol = "HTTPS"
       allowedRoutes = {
@@ -88,7 +88,7 @@ inputs = {
         mode = "Terminate"
         certificateRefs = [
           {
-            name  = "example-tls"
+            name  = "wildcard-tls"
             kind  = "Secret"
             group = ""
           }
@@ -96,8 +96,8 @@ inputs = {
       }
     },
     {
-      name     = "http-example"
-      hostname = local.secrets.gateway_api_domain
+      name     = "http-wildcard"
+      hostname = local.wildcard_domain
       port     = 80
       protocol = "HTTP"
       allowedRoutes = {
@@ -108,29 +108,13 @@ inputs = {
     }
   ]
 
-  # HTTPRoutes - configure your service routes
+  # HTTPRoutes - wildcard HTTP to HTTPS redirect
   http_routes = {
-    "example-https" = {
-      name         = "example"
-      namespace    = "default"
-      section_name = "https-example"
-      hostnames    = [local.secrets.gateway_api_domain]
-      rules = [
-        {
-          backendRefs = [
-            {
-              name = "example-service"
-              port = 80
-            }
-          ]
-        }
-      ]
-    }
-    "example-redirect" = {
-      name         = "example-redirect"
-      namespace    = "default"
-      section_name = "http-example"
-      hostnames    = [local.secrets.gateway_api_domain]
+    "wildcard-redirect" = {
+      name         = "wildcard-redirect"
+      namespace    = "ingress"
+      section_name = "http-wildcard"
+      hostnames    = [local.wildcard_domain]
       rules = [
         {
           filters = [
