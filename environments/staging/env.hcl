@@ -37,12 +37,11 @@ inputs = {
 
   cluster_delete_protection = false
 
-  # Smaller node pools for staging
   control_plane_nodepools = [
     {
       name     = "control"
       type     = "cx23"
-      location = "nbg1"
+      location = "fsn1"
       count    = 1
     }
   ]
@@ -51,7 +50,7 @@ inputs = {
     {
       name     = "worker"
       type     = "cx33"
-      location = "nbg1"
+      location = "fsn1"
       count    = 2
     }
   ]
@@ -60,21 +59,20 @@ inputs = {
     {
       name     = "autoscaler"
       type     = "cx33"
-      location = "nbg1"
+      location = "fsn1"
       min      = 0
       max      = 4
       labels   = { "autoscaler-node" = "true" }
     }
   ]
 
-  # ==================== Gateway API Configuration ====================
+  # Gateway API Configuration
   
   lb_name               = local.secrets.gateway_api_lb_name
-  lb_location           = "nbg1"
+  lb_location           = "fsn1"
   lb_type               = "lb11"
-  lb_uses_proxyprotocol = false # Disable proxy protocol for now
+  lb_uses_proxyprotocol = false
 
-  # Gateway Listeners - configure for your domains
   gateway_listeners = [
     {
       name     = "https-example"
