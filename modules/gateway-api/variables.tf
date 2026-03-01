@@ -106,42 +106,8 @@ variable "http_routes" {
   default = {}
 }
 
-variable "external_dns_enabled" {
-  description = "Enable External DNS for automatic DNS record management"
-  type        = bool
-  default     = true
-}
-
-variable "external_dns_namespace" {
-  description = "Kubernetes namespace for External DNS"
-  type        = string
-  default     = "kube-system"
-}
-
-variable "external_dns_version" {
-  description = "External DNS Helm chart version"
-  type        = string
-}
-
-variable "external_dns_provider" {
-  description = "DNS provider for External DNS (cloudflare, route53, etc.)"
-  type        = string
-  default     = "cloudflare"
-}
-
 variable "cloudflare_api_token" {
   description = "Cloudflare API token for DNS management"
   type        = string
   sensitive   = true
-}
-
-variable "external_dns_cluster_name" {
-  description = "Cluster name for External DNS (used for filtering)"
-  type        = string
-}
-
-variable "external_dns_helm_values" {
-  description = "Custom Helm values for External DNS"
-  type        = any
-  default     = {}
 }

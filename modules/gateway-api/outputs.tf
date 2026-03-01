@@ -22,18 +22,3 @@ output "http_routes" {
     }
   }
 }
-
-output "external_dns_enabled" {
-  description = "Whether External DNS is enabled"
-  value       = var.external_dns_enabled
-}
-
-output "external_dns_release_name" {
-  description = "Name of the External DNS Helm release"
-  value       = var.external_dns_enabled ? helm_release.external_dns[0].name : null
-}
-
-output "external_dns_namespace" {
-  description = "Namespace where External DNS is deployed"
-  value       = var.external_dns_namespace
-}
