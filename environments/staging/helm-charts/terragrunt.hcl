@@ -1,0 +1,74 @@
+# Include root configuration
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+# Include environment-specific configuration from parent directory
+include "env" {
+  path   = find_in_parent_folders("env.hcl", find_in_parent_folders("environments"))
+  expose = true
+}
+
+locals {
+  fallback_kubeconfig_path = "${dirname(find_in_parent_folders("env.hcl"))}/kubeconfig${include.env.locals.environment_name == "production" ? "" : "-${include.env.locals.environment_name}"}"
+}
+
+terraform {
+  source = "../../../modules/helm-charts"
+
+  before_hook "require_cluster_kubeconfig" {
+    commands = ["plan", "apply", "refresh", "import"]
+    execute = [
+      "bash",
+      "-lc",
+      "if [ ! -f '${local.fallback_kubeconfig_path}' ]; then echo 'Helm charts module requires an existing Kubernetes cluster kubeconfig at ${local.fallback_kubeconfig_path}. Apply environments/staging/kubernetes-cluster first.' >&2; exit 1; fi"
+    ]
+  }
+}
+
+dependencies {
+  paths = ["../kubernetes-cluster", "../crds"]
+}
+
+dependency "kubernetes_cluster" {
+  config_path = "../kubernetes-cluster"
+
+  mock_outputs = {
+    kubeconfig_path = local.fallback_kubeconfig_path
+  }
+  mock_outputs_allowed_terraform_commands = ["init", "validate"]
+}
+
+generate "providers" {
+  path      = "providers.tf"
+  if_exists = "overwrite_terragrunt"
+  contents  = <<-EOF
+terraform {
+  required_providers {
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.1"
+    }
+  }
+}
+
+provider "kubernetes" {
+  config_path = "${try(dependency.kubernetes_cluster.outputs.kubeconfig_path, local.fallback_kubeconfig_path)}"
+}
+
+provider "helm" {
+  kubernetes = {
+    config_path = "${try(dependency.kubernetes_cluster.outputs.kubeconfig_path, local.fallback_kubeconfig_path)}"
+  }
+}
+EOF
+}
+
+inputs = {
+  charts  = include.env.inputs.helm_charts
+  secrets = include.env.inputs.helm_secrets
+}

@@ -149,12 +149,130 @@ inputs = {
     }
   }
 
-  # ==================== External DNS Configuration ====================
+  # Helm Chart Secrets
 
-  external_dns_enabled      = true
-  external_dns_version      = "1.20.0"
-  external_dns_provider     = "cloudflare"
-  external_dns_cluster_name = "k8s-staging"
-  cloudflare_api_token      = local.secrets.cloudflare_api_token
-  external_dns_helm_values  = {}
+  helm_secrets = {
+    cloudflare-api-key = {
+      name             = "cloudflare-api-key"
+      namespace        = "kube-system"
+      create_namespace = false
+      data = {
+        apiToken = local.secrets.cloudflare_api_token
+      }
+    }
+
+    github-arc-pat = {
+      name             = "github-arc-pat"
+      namespace        = "arc-runners"
+      create_namespace = true
+      data = {
+        github_token = local.secrets.github_token
+      }
+    }
+  }
+
+  # Helm Charts
+
+  helm_charts = {
+    external-dns = {
+      repository   = "https://kubernetes-sigs.github.io/external-dns/"
+      chart        = "external-dns"
+      version      = "1.20.0"
+      namespace    = "kube-system"
+      release_name = "external-dns"
+      manage_crds  = false
+      install      = true
+      values = {
+        provider = {
+          name = "cloudflare"
+        }
+        policy     = "sync"
+        registry   = "txt"
+        txtOwnerId = "k8s-staging"
+        sources    = ["gateway-httproute"]
+        env = [
+          {
+            name = "CF_API_TOKEN"
+            valueFrom = {
+              secretKeyRef = {
+                name = "cloudflare-api-key"
+                key  = "apiToken"
+              }
+            }
+          }
+        ]
+        rbac = {
+          create = true
+        }
+        service = {
+          type = "ClusterIP"
+        }
+        logLevel = "info"
+      }
+    }
+
+    gha-runner-scale-set-controller = {
+      repository   = "oci://ghcr.io/actions/actions-runner-controller-charts"
+      chart        = "gha-runner-scale-set-controller"
+      version      = "0.13.1"
+      namespace    = "arc-systems"
+      release_name = "gha-runner-scale-set-controller"
+      manage_crds  = true
+      install      = true
+      values       = {}
+    }
+
+    gha-runner-scale-set = {
+      repository   = "oci://ghcr.io/actions/actions-runner-controller-charts"
+      chart        = "gha-runner-scale-set"
+      version      = "0.13.1"
+      namespace    = "arc-runners"
+      release_name = "gha-runner-scale-set"
+      manage_crds  = false
+      install      = true
+      priority     = 2
+      values = {
+        githubConfigUrl    = local.secrets.github_config_url
+        githubConfigSecret = "github-arc-pat"
+        runnerGroup        = try(local.secrets.github_runner_group, "Default")
+        minRunners         = 1
+      }
+    }
+
+    argocd = {
+      repository   = "https://argoproj.github.io/argo-helm"
+      chart        = "argo-cd"
+      version      = "9.4.5"
+      namespace    = "argocd"
+      release_name = "argocd"
+      manage_crds  = false
+      install      = true
+      values = {
+        global = {
+          domain = "argocd.${local.environment_name}.${local.base_domain}"
+        }
+        configs = {
+          params = {
+            "server.insecure" = true
+          }
+        }
+        server = {
+          service = {
+            type = "ClusterIP"
+          }
+          httproute = {
+            enabled   = true
+            hostnames = ["argocd.${local.environment_name}.${local.base_domain}"]
+            parentRefs = [
+              {
+                name        = "cilium-gateway"
+                namespace   = "ingress"
+                sectionName = "https-wildcard"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
 }
