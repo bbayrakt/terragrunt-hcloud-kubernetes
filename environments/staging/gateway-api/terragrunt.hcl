@@ -35,21 +35,11 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 3.0"
     }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 3.1"
-    }
   }
 }
 
 provider "kubernetes" {
-  config_path = "${dependency.kubernetes_cluster.outputs.kubeconfig_path}"
-}
-
-provider "helm" {
-  kubernetes = {
-    config_path = "${dependency.kubernetes_cluster.outputs.kubeconfig_path}"
-  }
+  config_path = "${try(dependency.kubernetes_cluster.outputs.kubeconfig_path, local.fallback_kubeconfig_path)}"
 }
 EOF
 }
