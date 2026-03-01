@@ -1,0 +1,28 @@
+---
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs
+    restart: unless-stopped
+    ports:
+      - "8333:8333"   # S3 API
+    volumes:
+      - seaweedfs_data:/data
+      - /path/to/s3.json:/etc/seaweedfs/s3.json:ro
+    command: >
+      server -dir=/data -s3
+      -s3.config=/etc/seaweedfs/s3.json
+
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs-admin
+    restart: unless-stopped
+    command: admin -masters=seaweedfs:9333 -port=23646
+    ports:
+      - "23646:23646"
+    depends_on:
+      - seaweedfs
+
+volumes:
+  seaweedfs_data:
+    driver: local
