@@ -2,31 +2,33 @@
 # This file contains all input variables for all modules in the staging environment
 
 locals {
+  environment_name          = "staging"
+  kubernetes_module_version = "3.23.0"
+  secrets                   = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
   base_domain               = local.secrets.gateway_api_domain
   wildcard_domain           = "*.${local.environment_name}.${local.base_domain}"
 }
 
 inputs = {
   # Kubernetes Cluster Configuration
-  
-  # See https://github.com/hcloud-k8s/terraform-hcloud-kubernetes/releases
-  terraform_hcloud_kubernetes_module_version = "3.21.3"
 
   cluster_name = "k8s-staging"
   hcloud_token = local.secrets.hcloud_token
 
-  # Enable Cert Manager
   cert_manager_enabled = true
 
-  # Cilium Transparent Encryption
   cilium_encryption_enabled = true
   cilium_encryption_type    = "ipsec"
 
-  # Cilium Gateway API
   cilium_gateway_api_enabled                = true
   cilium_gateway_api_proxy_protocol_enabled = false # Disabled due to IPv6 bug: https://github.com/cilium/cilium/issues/42950
 
-  # Talos Backup
+  external_dns_enabled      = true
+  external_dns_version      = "1.20.0"
+  external_dns_provider     = "cloudflare"
+  external_dns_cluster_name = "k8s-staging"
+  cloudflare_api_token      = local.secrets.cloudflare_api_token
+
   talos_backup_s3_enabled    = true
   talos_backup_s3_region     = "us-east-1"
   talos_backup_s3_endpoint   = local.secrets.seaweedfs_endpoint
@@ -67,7 +69,7 @@ inputs = {
   ]
 
   # Gateway API Configuration
-  
+
   lb_name               = local.secrets.gateway_api_lb_name
   lb_location           = "fsn1"
   lb_type               = "lb11"
