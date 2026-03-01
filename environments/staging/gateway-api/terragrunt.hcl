@@ -5,13 +5,14 @@ include "root" {
 
 # Include environment-specific configuration from parent directory
 include "env" {
-  path = find_in_parent_folders("env.hcl", find_in_parent_folders("environments"))
+  path   = find_in_parent_folders("env.hcl", find_in_parent_folders("environments"))
   expose = true
 }
 
 # Decrypt secrets directly using SOPS
 locals {
-  secrets = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+  secrets                  = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+  fallback_kubeconfig_path = "${dirname(find_in_parent_folders("env.hcl"))}/kubeconfig${include.env.locals.environment_name == "production" ? "" : "-${include.env.locals.environment_name}"}"
 }
 
 # Use the gateway-api module
@@ -50,6 +51,15 @@ errors {
 # Ensure kubernetes-cluster is deployed first
 dependency "kubernetes_cluster" {
   config_path = "../kubernetes-cluster"
+
+  mock_outputs = {
+    kubeconfig_path = local.fallback_kubeconfig_path
+  }
+  mock_outputs_allowed_terraform_commands = ["init", "validate"]
+}
+
+dependencies {
+  paths = ["../kubernetes-cluster", "../crds", "../helm-charts"]
 }
 
 # Generate providers.tf dynamically from Terragrunt
