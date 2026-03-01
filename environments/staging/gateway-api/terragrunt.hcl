@@ -17,6 +17,34 @@ locals {
 # Use the gateway-api module
 terraform {
   source = "../../../modules/gateway-api"
+
+  before_hook "require_cluster_kubeconfig" {
+    commands = ["plan", "apply", "refresh", "import"]
+    execute = [
+      "bash",
+      "-lc",
+      "if [ ! -f '${local.fallback_kubeconfig_path}' ]; then echo 'Gateway API requires an existing Kubernetes cluster kubeconfig at ${local.fallback_kubeconfig_path}. Apply environments/staging/kubernetes-cluster first.' >&2; exit 1; fi"
+    ]
+  }
+}
+
+errors {
+  retry "default_errors" {
+    retryable_errors   = get_default_retryable_errors()
+    max_attempts       = 3
+    sleep_interval_sec = 15
+  }
+
+  retry "custom_errors" {
+    retryable_errors = [
+      "(?s).*API did not recognize GroupVersionKind from manifest \\(CRD may not be installed\\).*",
+      "(?s).*no matches for kind \"Issuer\" in group \"cert-manager.io\".*",
+      "(?s).*no matches for kind \"Gateway\" in group \"gateway.networking.k8s.io\".*",
+      "(?s).*no matches for kind \"HTTPRoute\" in group \"gateway.networking.k8s.io\".*",
+    ]
+    max_attempts       = 6
+    sleep_interval_sec = 15
+  }
 }
 
 # Ensure kubernetes-cluster is deployed first
