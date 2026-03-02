@@ -54,7 +54,7 @@ resource "helm_release" "wave_1" {
   version          = each.value.version
   namespace        = each.value.namespace
   create_namespace = true
-  skip_crds        = true
+  skip_crds        = try(each.value.manage_crds, true)
 
   values = [
     yamlencode(try(each.value.values, {}))
@@ -73,7 +73,7 @@ resource "helm_release" "wave_2" {
   version          = each.value.version
   namespace        = each.value.namespace
   create_namespace = true
-  skip_crds        = true
+  skip_crds        = try(each.value.manage_crds, true)
 
   values = [
     yamlencode(try(each.value.values, {}))
@@ -92,7 +92,7 @@ resource "helm_release" "wave_3" {
   version          = each.value.version
   namespace        = each.value.namespace
   create_namespace = true
-  skip_crds        = true
+  skip_crds        = try(each.value.manage_crds, true)
 
   values = [
     yamlencode(try(each.value.values, {}))
