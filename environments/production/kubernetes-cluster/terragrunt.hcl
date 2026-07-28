@@ -16,7 +16,6 @@ locals {
 }
 
 # Use the remote terraform-hcloud-kubernetes module directly.
-# v5.x reorganized: all .tf files are at repo root, no subdirectory needed.
 terraform {
   source = "git::https://github.com/hcloud-k8s/terraform-hcloud-kubernetes.git?ref=${include.env.locals.kubernetes_module_version}"
 
