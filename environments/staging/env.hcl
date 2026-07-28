@@ -3,16 +3,17 @@
 
 locals {
   environment_name          = "staging"
-  kubernetes_module_version = "3.23.0"
+  kubernetes_module_version = "5.3.0"
   secrets                   = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
   base_domain               = local.secrets.gateway_api_domain
   wildcard_domain           = "*.${local.environment_name}.${local.base_domain}"
+  cluster_name              = "k8s-staging"
 }
 
 inputs = {
   # Kubernetes Cluster Configuration
 
-  cluster_name = "k8s-staging"
+  cluster_name = local.cluster_name
   hcloud_token = local.secrets.hcloud_token
 
   cert_manager_enabled = true
