@@ -3,16 +3,17 @@
 
 locals {
   environment_name          = "staging"
-  kubernetes_module_version = "3.23.0"
+  kubernetes_module_version = "5.3.0"
   secrets                   = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
   base_domain               = local.secrets.gateway_api_domain
   wildcard_domain           = "*.${local.environment_name}.${local.base_domain}"
+  cluster_name              = "k8s-staging"
 }
 
 inputs = {
   # Kubernetes Cluster Configuration
 
-  cluster_name = "k8s-staging"
+  cluster_name = local.cluster_name
   hcloud_token = local.secrets.hcloud_token
 
   cert_manager_enabled = true
@@ -39,34 +40,60 @@ inputs = {
 
   cluster_delete_protection = false
 
+  karpenter_chart_version = "2.0.0"
+
+  karpenter_locations      = ["fsn1"]
+  karpenter_nodeclass_name = "talos-default"
+  #   karpenter_nodeclass_labels = { team = "platform", tier = "worker" }
+  karpenter_nodeclass_labels = {}
+  #   karpenter_nodeclass_spec_overrides = { firewallIDs = ["123456"] }
+  karpenter_nodeclass_spec_overrides = {}
+  karpenter_nodepool_name = "staging-cpx"
+  karpenter_server_types = [
+    "cx23",
+    "cx33",
+    "cx43",
+    "cpx22",
+    "cpx32",
+  ]
+  karpenter_worker_cpu_limit = "16"
+  #   karpenter_nodepool_template_labels = { "workload-class" = "batch" }
+  karpenter_nodepool_template_labels = {}
+  #   karpenter_nodepool_spec_overrides = {
+  #     disruption = {
+  #       consolidationPolicy = "WhenEmpty"
+  #       consolidateAfter    = "5m"
+  #     }
+  #   }
+  karpenter_nodepool_spec_overrides = {}
+
   control_plane_nodepools = [
     {
       name     = "control"
-      type     = "cx23"
+      type     = "cpx32"
       location = "fsn1"
       count    = 1
     }
   ]
 
+  # A single static "system" worker hosts the Karpenter controller.
+  # Its presence causes the upstream module to automatically taint the 
+  # control plane with node-role.kubernetes.io/control-plane:NoSchedule 
+  # (worker_sum > 0)
   worker_nodepools = [
     {
-      name     = "worker"
-      type     = "cx33"
+      name     = "system"
+      type     = "cpx22"
       location = "fsn1"
-      count    = 2
+      count    = 1
+      labels = {
+        "workload-class" = "worker"
+      }
     }
   ]
 
-  cluster_autoscaler_nodepools = [
-    {
-      name     = "autoscaler"
-      type     = "cx33"
-      location = "fsn1"
-      min      = 0
-      max      = 4
-      labels   = { "autoscaler-node" = "true" }
-    }
-  ]
+  cluster_autoscaler_nodepools         = []
+  cluster_autoscaler_discovery_enabled = false
 
   # Gateway API Configuration
 
@@ -203,7 +230,6 @@ inputs = {
       release_name = "gha-runner-scale-set-controller"
       manage_crds  = true
       install      = true
-      values       = {}
     }
 
     gha-runner-scale-set = {
@@ -231,6 +257,7 @@ inputs = {
       release_name = "argocd"
       manage_crds  = false
       install      = true
+      priority     = 3
       values = {
         global = {
           domain = "argocd.${local.environment_name}.${local.base_domain}"

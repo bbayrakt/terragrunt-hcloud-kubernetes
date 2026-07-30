@@ -2,17 +2,18 @@
 # This file contains all input variables for all modules in the production environment
 
 locals {
-  environment_name = "production"
-  secrets          = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+  environment_name          = "production"
+  kubernetes_module_version = "3.21.3"
+  secrets                   = yamldecode(sops_decrypt_file(find_in_parent_folders("secrets.yaml")))
+  base_domain               = local.secrets.gateway_api_domain
+  wildcard_domain           = "*.${local.base_domain}"
+  cluster_name              = "k8s-production"
 }
 
 inputs = {
   # Kubernetes Cluster Configuration
 
-  # See https://github.com/hcloud-k8s/terraform-hcloud-kubernetes/releases
-  terraform_hcloud_kubernetes_module_version = "3.21.3"
-
-  cluster_name = "k8s-production"
+  cluster_name = local.cluster_name
   hcloud_token = local.secrets.hcloud_token
 
   # Enable Cert Manager

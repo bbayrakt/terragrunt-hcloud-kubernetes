@@ -44,6 +44,7 @@ terraform {
 
         kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established --timeout=5m crd/gateways.gateway.networking.k8s.io
         kubectl --kubeconfig "$kubeconfig" wait --for=condition=Established --timeout=5m crd/httproutes.gateway.networking.k8s.io
+        kubectl --kubeconfig "$kubeconfig" -n karpenter rollout status deployment/karpenter-provider-hetzner --timeout=5m
       EOT
     ]
   }
@@ -69,7 +70,7 @@ errors {
 }
 
 dependencies {
-  paths = ["../kubernetes-cluster", "../crds"]
+  paths = ["../kubernetes-cluster", "../crds", "../karpenter"]
 }
 
 dependency "kubernetes_cluster" {

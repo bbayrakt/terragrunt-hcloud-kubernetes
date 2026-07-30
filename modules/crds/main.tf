@@ -8,6 +8,7 @@ data "helm_template" "charts" {
   repository       = each.value.repository
   chart            = each.value.chart
   version          = each.value.version
+  values           = [yamlencode(try(each.value.values, {}))]
   include_crds     = true
   kube_version     = try(each.value.kube_version, "1.33.0")
 }
