@@ -39,7 +39,33 @@ inputs = {
   talos_backup_s3_secret_key = local.secrets.seaweedfs_secret_key
 
   cluster_delete_protection = false
+
   karpenter_chart_version = "2.0.0"
+
+  karpenter_locations      = ["fsn1"]
+  karpenter_nodeclass_name = "talos-default"
+  #   karpenter_nodeclass_labels = { team = "platform", tier = "worker" }
+  karpenter_nodeclass_labels = {}
+  #   karpenter_nodeclass_spec_overrides = { firewallIDs = ["123456"] }
+  karpenter_nodeclass_spec_overrides = {}
+  karpenter_nodepool_name = "staging-cpx"
+  karpenter_server_types = [
+    "cx23",
+    "cx33",
+    "cx43",
+    "cpx22",
+    "cpx32",
+  ]
+  karpenter_worker_cpu_limit = "16"
+  #   karpenter_nodepool_template_labels = { "workload-class" = "batch" }
+  karpenter_nodepool_template_labels = {}
+  #   karpenter_nodepool_spec_overrides = {
+  #     disruption = {
+  #       consolidationPolicy = "WhenEmpty"
+  #       consolidateAfter    = "5m"
+  #     }
+  #   }
+  karpenter_nodepool_spec_overrides = {}
 
   control_plane_nodepools = [
     {
@@ -66,7 +92,6 @@ inputs = {
     }
   ]
 
-  # Karpenter replaces the static Cluster Autoscaler node pools in staging.
   cluster_autoscaler_nodepools         = []
   cluster_autoscaler_discovery_enabled = false
 
@@ -205,7 +230,6 @@ inputs = {
       release_name = "gha-runner-scale-set-controller"
       manage_crds  = true
       install      = true
-      values       = {}
     }
 
     gha-runner-scale-set = {
@@ -233,6 +257,7 @@ inputs = {
       release_name = "argocd"
       manage_crds  = false
       install      = true
+      priority     = 3
       values = {
         global = {
           domain = "argocd.${local.environment_name}.${local.base_domain}"
