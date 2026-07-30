@@ -26,6 +26,8 @@ Only run checks if changes are made in the corresponding module.
   - `cd environments/staging/gateway-api && terragrunt validate`
 - Production gateway:
   - `cd environments/production/gateway-api && terragrunt validate`
+- Staging ArgoCD GitOps:
+  - `cd environments/staging/argocd-gitops && terragrunt validate`
 
 ## Notes
 - If a dependency output is unavailable during `terragrunt hcl validate`, use deterministic local fallbacks in Terragrunt expressions so validation remains static-safe.
