@@ -59,7 +59,7 @@ dependency "kubernetes_cluster" {
 }
 
 dependencies {
-  paths = ["../kubernetes-cluster", "../crds", "../helm-charts"]
+  paths = ["../kubernetes-cluster", "../crds", "../karpenter", "../helm-charts"]
 }
 
 # Generate providers.tf dynamically from Terragrunt
