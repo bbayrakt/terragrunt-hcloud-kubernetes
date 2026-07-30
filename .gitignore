@@ -7,3 +7,6 @@ kubeconfig*
 talosconfig*
 
 keys.txt
+
+# Local ArgoCD admin credential fetched by the argocd-gitops stack's before_hook (never committed)
+**/.argocd-admin-password
