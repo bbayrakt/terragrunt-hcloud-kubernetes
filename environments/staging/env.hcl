@@ -39,35 +39,36 @@ inputs = {
   talos_backup_s3_secret_key = local.secrets.seaweedfs_secret_key
 
   cluster_delete_protection = false
+  karpenter_chart_version = "2.0.0"
 
   control_plane_nodepools = [
     {
       name     = "control"
-      type     = "cx23"
+      type     = "cpx32"
       location = "fsn1"
       count    = 1
     }
   ]
 
+  # A single static "system" worker hosts the Karpenter controller.
+  # Its presence causes the upstream module to automatically taint the 
+  # control plane with node-role.kubernetes.io/control-plane:NoSchedule 
+  # (worker_sum > 0)
   worker_nodepools = [
     {
-      name     = "worker"
-      type     = "cx33"
+      name     = "system"
+      type     = "cpx22"
       location = "fsn1"
-      count    = 2
+      count    = 1
+      labels = {
+        "workload-class" = "worker"
+      }
     }
   ]
 
-  cluster_autoscaler_nodepools = [
-    {
-      name     = "autoscaler"
-      type     = "cx33"
-      location = "fsn1"
-      min      = 0
-      max      = 4
-      labels   = { "autoscaler-node" = "true" }
-    }
-  ]
+  # Karpenter replaces the static Cluster Autoscaler node pools in staging.
+  cluster_autoscaler_nodepools         = []
+  cluster_autoscaler_discovery_enabled = false
 
   # Gateway API Configuration
 
