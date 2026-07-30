@@ -40,46 +40,46 @@ variable "network_name" {
   type        = string
 }
 
-variable "location" {
-  description = "Hetzner location for Karpenter workers."
-  type        = string
-  default     = "fsn1"
+variable "locations" {
+  description = "Hetzner location(s) Karpenter may provision workers in. Applied to both the HCloudNodeClass spec.locations and the NodePool's topology.kubernetes.io/zone requirement (operator In), so listing multiple locations here lets Karpenter spread/bin-pack workers across all of them."
+  type        = list(string)
+  default     = ["fsn1"]
+  nullable    = false
 }
 
-variable "server_family" {
-  description = "Hetzner server family allowed by the NodePool."
-  type        = string
-  default     = "cpx"
+variable "architectures" {
+  description = "CPU architectures Karpenter may provision for the NodePool (kubernetes.io/arch requirement, operator In). Default is amd64-only since Hetzner Cloud does not yet offer arm64 server types; override if/when that changes or to restrict further."
+  type        = list(string)
+  default     = ["amd64"]
+  nullable    = false
 }
 
-variable "server_type" {
-  description = "Specific server type used to cap the initial staging pool."
-  type        = string
-  default     = "cpx32"
+variable "server_types" {
+  description = "Hetzner server types Karpenter may provision for the NodePool (karpenter.sh/v1 NodePool node.kubernetes.io/instance-type requirement, operator In). Karpenter bin-packs the cheapest type from this list that fits a pending pod. Each type's server family (e.g. cx, cpx) is implied by the type itself, so no separate family requirement is needed."
+  type        = list(string)
+  default     = ["cpx32"]
+  nullable    = false
 }
 
 variable "worker_cpu_limit" {
   description = "Maximum total CPU Karpenter may provision for the staging pool."
   type        = string
   default     = "16"
-}
-
-variable "image_selector" {
-  description = "Optional additional image label selector. The module adds the cluster Talos labels."
-  type        = map(string)
-  default     = {}
+  nullable    = false
 }
 
 variable "public_ipv4_enabled" {
   description = "Whether Karpenter workers receive public IPv4 addresses."
   type        = bool
   default     = true
+  nullable    = false
 }
 
 variable "public_ipv6_enabled" {
   description = "Whether Karpenter workers receive public IPv6 addresses."
   type        = bool
   default     = true
+  nullable    = false
 }
 
 variable "controller_values" {
@@ -132,6 +132,70 @@ variable "hcloud_token_secret_name" {
   description = "Name of the Kubernetes Secret, created by this module in the release namespace, holding the Hetzner Cloud API token consumed by the controller."
   type        = string
   default     = "karpenter-hcloud-token"
+  nullable    = false
+}
+
+variable "environment" {
+  description = "Environment name used to label Karpenter-managed resources (e.g. the HCloudNodeClass). Required so labels are never silently hardcoded to one environment."
+  type        = string
+}
+
+variable "nodeclass_name" {
+  description = "Name of the managed HCloudNodeClass."
+  type        = string
+  default     = "talos-default"
+  nullable    = false
+}
+
+variable "nodeclass_labels" {
+  description = "Additional or overriding labels merged onto the HCloudNodeClass spec.labels, in addition to the module's cluster/managed-by/environment labels."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
+variable "nodeclass_spec_overrides" {
+  description = "Arbitrary overrides merged (shallow, top-level) over the computed HCloudNodeClass spec. Use this to override or add any field not already exposed as a dedicated variable (e.g. firewallIDs, sshKeyIDs, userData)."
+  type        = any
+  default     = {}
+  nullable    = false
+}
+
+variable "nodepool_name" {
+  description = "Name of the managed NodePool."
+  type        = string
+  default     = "default"
+  nullable    = false
+}
+
+variable "nodepool_template_labels" {
+  description = "Additional or overriding labels merged onto the NodePool template.metadata.labels, in addition to the module's workload-class label."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
+variable "nodepool_spec_overrides" {
+  description = <<-EOT
+    Arbitrary overrides merged (shallow, top-level) over the computed NodePool
+    spec. Use this to override or add any field not already exposed as a
+    dedicated variable (e.g. taints, weight, additional requirements, or the
+    default disruption policy).
+
+    Note: the merge is shallow at the top level of spec, so supplying a key
+    here (e.g. "disruption") fully replaces the module's computed value for
+    that key rather than deep-merging into it. Example, to relax the default
+    consolidation policy:
+
+      nodepool_spec_overrides = {
+        disruption = {
+          consolidationPolicy = "WhenEmpty"
+          consolidateAfter    = "5m"
+        }
+      }
+  EOT
+  type        = any
+  default     = {}
   nullable    = false
 }
 

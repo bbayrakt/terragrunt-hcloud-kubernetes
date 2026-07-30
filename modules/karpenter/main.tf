@@ -1,16 +1,11 @@
 locals {
   worker_machineconfig_secret_name = "karpenter-worker-machineconfig"
-  nodeclass_name                   = "talos-default"
-  nodepool_name                    = "staging-cpx"
-
-  image_selector = merge(
-    {
-      os               = "talos"
-      cluster          = var.cluster_name
-      talos_version    = var.talos_version
-    },
-    var.image_selector,
-  )
+  image_selector = {
+    os                 = "talos"
+    cluster            = var.cluster_name
+    talos_version      = var.talos_version
+    talos_schematic_id = data.hcloud_image.cluster_talos.labels["talos_schematic_id"]
+  }
 
   controller_values = merge(
     {
@@ -55,6 +50,12 @@ resource "kubernetes_secret_v1" "hcloud_token" {
 
 data "hcloud_network" "cluster" {
   name = var.network_name
+}
+
+data "hcloud_image" "cluster_talos" {
+  with_selector     = "os=talos,cluster=${var.cluster_name},talos_version=${var.talos_version}"
+  with_architecture = "x86"
+  most_recent       = true
 }
 
 # Render the Karpenter chart's CRDs via data.helm_template and apply
@@ -163,7 +164,7 @@ data "talos_machine_configuration" "worker" {
 resource "kubernetes_secret_v1" "worker_machineconfig" {
   metadata {
     name      = local.worker_machineconfig_secret_name
-    namespace = "kube-system"
+    namespace = var.namespace
     labels = {
       "app.kubernetes.io/managed-by" = "terraform"
       "karpenter.hetzner.cloud/type" = "talos-worker-machineconfig"
@@ -175,6 +176,8 @@ resource "kubernetes_secret_v1" "worker_machineconfig" {
   data = {
     "worker.yaml" = data.talos_machine_configuration.worker.machine_configuration
   }
+
+  depends_on = [kubernetes_namespace_v1.this]
 }
 
 resource "helm_release" "karpenter" {
@@ -205,29 +208,35 @@ resource "kubernetes_manifest" "nodeclass" {
     apiVersion = "karpenter.hetzner.cloud/v1"
     kind       = "HCloudNodeClass"
     metadata = {
-      name = local.nodeclass_name
+      name = var.nodeclass_name
     }
-    spec = {
-      locations = [var.location]
-      networkID = data.hcloud_network.cluster.id
-      imageSelector = {
-        family   = "talos"
-        selector = local.image_selector
-      }
-      placementGroupStrategy = "spread"
-      enablePublicIPv4       = var.public_ipv4_enabled
-      enablePublicIPv6       = var.public_ipv6_enabled
-      userDataSecretRef = {
-        namespace = "kube-system"
-        name      = kubernetes_secret_v1.worker_machineconfig.metadata[0].name
-        key       = "worker.yaml"
-      }
-      labels = {
-        cluster     = var.cluster_name
-        managed-by  = "karpenter"
-        environment = "staging"
-      }
-    }
+    spec = merge(
+      {
+        locations = var.locations
+        networkID = data.hcloud_network.cluster.id
+        imageSelector = {
+          family   = "talos"
+          selector = local.image_selector
+        }
+        placementGroupStrategy = "spread"
+        enablePublicIPv4       = var.public_ipv4_enabled
+        enablePublicIPv6       = var.public_ipv6_enabled
+        userDataSecretRef = {
+          namespace = kubernetes_secret_v1.worker_machineconfig.metadata[0].namespace
+          name      = kubernetes_secret_v1.worker_machineconfig.metadata[0].name
+          key       = "worker.yaml"
+        }
+        labels = merge(
+          {
+            cluster     = var.cluster_name
+            managed-by  = "karpenter"
+            environment = var.environment
+          },
+          var.nodeclass_labels,
+        )
+      },
+      var.nodeclass_spec_overrides,
+    )
   }
 
   depends_on = [kubernetes_manifest.karpenter_crds]
@@ -238,53 +247,54 @@ resource "kubernetes_manifest" "nodepool" {
     apiVersion = "karpenter.sh/v1"
     kind       = "NodePool"
     metadata = {
-      name = local.nodepool_name
+      name = var.nodepool_name
     }
-    spec = {
-      template = {
-        metadata = {
-          labels = {
-            "workload-class" = "worker"
+    spec = merge(
+      {
+        template = {
+          metadata = {
+            labels = merge(
+              {
+                "workload-class" = "worker"
+              },
+              var.nodepool_template_labels,
+            )
+          }
+          spec = {
+            nodeClassRef = {
+              group = "karpenter.hetzner.cloud"
+              kind  = "HCloudNodeClass"
+              name  = var.nodeclass_name
+            }
+            requirements = [
+              {
+                key      = "kubernetes.io/arch"
+                operator = "In"
+                values   = var.architectures
+              },
+              {
+                key      = "node.kubernetes.io/instance-type"
+                operator = "In"
+                values   = var.server_types
+              },
+              {
+                key      = "topology.kubernetes.io/zone"
+                operator = "In"
+                values   = var.locations
+              },
+            ]
           }
         }
-        spec = {
-          nodeClassRef = {
-            group = "karpenter.hetzner.cloud"
-            kind  = "HCloudNodeClass"
-            name  = local.nodeclass_name
-          }
-          requirements = [
-            {
-              key      = "kubernetes.io/arch"
-              operator = "In"
-              values   = ["amd64"]
-            },
-            {
-              key      = "karpenter.hetzner.cloud/server-family"
-              operator = "In"
-              values   = [var.server_family]
-            },
-            {
-              key      = "node.kubernetes.io/instance-type"
-              operator = "In"
-              values   = [var.server_type]
-            },
-            {
-              key      = "topology.kubernetes.io/zone"
-              operator = "In"
-              values   = [var.location]
-            },
-          ]
+        limits = {
+          cpu = var.worker_cpu_limit
         }
-      }
-      limits = {
-        cpu = var.worker_cpu_limit
-      }
-      disruption = {
-        consolidationPolicy = "WhenEmptyOrUnderutilized"
-        consolidateAfter    = "30s"
-      }
-    }
+        disruption = {
+          consolidationPolicy = "WhenEmptyOrUnderutilized"
+          consolidateAfter    = "30s"
+        }
+      },
+      var.nodepool_spec_overrides,
+    )
   }
 
   depends_on = [kubernetes_manifest.nodeclass]

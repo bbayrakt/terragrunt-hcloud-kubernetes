@@ -10,10 +10,10 @@ output "namespace" {
 
 output "nodeclass_name" {
   description = "Managed HCloudNodeClass name."
-  value       = local.nodeclass_name
+  value       = var.nodeclass_name
 }
 
 output "nodepool_name" {
   description = "Managed NodePool name."
-  value       = local.nodepool_name
+  value       = var.nodepool_name
 }
