@@ -24,7 +24,11 @@ variable "apps_pod_security_level" {
 variable "platform_destination_namespaces" {
   description = "Namespace allow-list for the `platform` AppProject's destinations"
   type        = list(string)
-  default     = ["arc-systems", "kube-system"]
+  # `sealed-secrets` (not `kube-system`) -- found by ce-code-review: since the ApplicationSet
+  # template derives destination.namespace from the GitOps repo's directory basename
+  # ({{path.basename}}), each app's directory name IS its target namespace. A dedicated
+  # namespace also avoids depositing the Sealed Secrets controller into kube-system.
+  default = ["arc-systems", "sealed-secrets"]
 }
 
 variable "platform_cluster_resource_whitelist" {

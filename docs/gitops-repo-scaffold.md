@@ -34,9 +34,21 @@ Static extra manifests (like the `apps` tier's `SealedSecret`) go in the chart's
 `templates/` directory — Helm renders any plain YAML placed there unchanged alongside the
 Go-templated files.
 
+**Naming convention — directory name is the target namespace, not the chart name (found by
+ce-code-review, corrected on this revision).** The `ApplicationSet` template sets
+`destination.namespace = "{{path.basename}}"` (`modules/argocd-gitops/main.tf`) — the destination
+namespace is literally the directory's basename, not something separately configurable per app
+with this template. An earlier revision of this doc named directories after the *chart*
+(`apps/gha-runner-scale-set/`, `platform/gha-runner-scale-set-controller/`), which would have
+resolved to destination namespaces that don't exist in either `AppProject`'s allow-list,
+causing every sync to fail outright. Directories below are named after the **namespace** each
+app actually deploys into instead. If a future app needs a namespace not yet in
+`apps_destination_namespaces` / `platform_destination_namespaces`
+(`modules/argocd-gitops/variables.tf`), add it there first.
+
 ---
 
-## `platform/gha-runner-scale-set-controller/`
+## `platform/arc-systems/`
 
 `Chart.yaml`:
 
@@ -83,9 +95,11 @@ sealed-secrets:
 
 > After first sync, back up the controller's auto-generated sealing keypair Secret
 > immediately — losing it makes every previously-committed `SealedSecret` unrecoverable
-> (see the plan's Risks & Dependencies).
+> (see the plan's Risks & Dependencies). This directory's namespace default changed from
+> `kube-system` to a dedicated `sealed-secrets` namespace (see `variables.tf`) as part of the
+> naming-convention fix above.
 
-## `apps/gha-runner-scale-set/`
+## `apps/arc-runners/`
 
 `Chart.yaml`:
 
@@ -156,13 +170,13 @@ so this rule picks it up, and reference it via a KSOPS generator per the upstrea
 ## Full expected layout
 
     apps/
-        gha-runner-scale-set/
+        arc-runners/
             Chart.yaml
             values.yaml
             templates/
                 sealed-secret.yaml
     platform/
-        gha-runner-scale-set-controller/
+        arc-systems/
             Chart.yaml
             values.yaml
         sealed-secrets/

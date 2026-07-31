@@ -71,14 +71,19 @@ terraform {
           exit 1
         fi
 
-        if ! kubectl --kubeconfig "$kubeconfig" -n argocd get secret argocd-initial-admin-secret >/dev/null 2>&1; then
+        if ! kubectl --kubeconfig "$kubeconfig" --request-timeout=30s -n argocd get secret argocd-initial-admin-secret >/dev/null 2>&1; then
           echo "argocd-initial-admin-secret not found in namespace argocd -- has environments/staging/helm-charts been applied?" >&2
           exit 1
         fi
 
         password_file="${local.argocd_admin_password_file}"
         umask 077
-        kubectl --kubeconfig "$kubeconfig" -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d > "$password_file"
+        password="$(kubectl --kubeconfig "$kubeconfig" --request-timeout=30s -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
+        if [ -z "$password" ]; then
+          echo "argocd-initial-admin-secret exists but its 'password' key is empty -- refusing to write an empty credential file." >&2
+          exit 1
+        fi
+        printf '%s' "$password" > "$password_file"
       EOT
     ]
   }

@@ -86,7 +86,10 @@ resource "argocd_application_set" "apps" {
   # creation time; without this, Terraform's default parallel resource creation can attempt to
   # create the ApplicationSet before the argocd_project transaction is visible, failing with
   # "ApplicationSet references project apps which does not exist".
-  depends_on = [argocd_project.apps]
+  # Also depends on argocd_repository (found by ce-code-review): the generator's repo_url must
+  # already be registered, or the same class of "references X which does not exist" race applies
+  # to the repository instead of the project.
+  depends_on = [argocd_project.apps, argocd_repository.gitops]
 
   metadata {
     name = "apps"
@@ -157,7 +160,7 @@ resource "argocd_application_set" "apps" {
 }
 
 resource "argocd_application_set" "platform" {
-  depends_on = [argocd_project.platform]
+  depends_on = [argocd_project.platform, argocd_repository.gitops]
 
   metadata {
     name = "platform"
