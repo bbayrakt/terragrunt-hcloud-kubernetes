@@ -32,3 +32,4 @@ Only run checks if changes are made in the corresponding module.
 ## Notes
 - If a dependency output is unavailable during `terragrunt hcl validate`, use deterministic local fallbacks in Terragrunt expressions so validation remains static-safe.
 - Do not hardcode secrets in HCL/Terraform files; keep secrets in `secrets.yaml` and decrypt via SOPS.
+- Documented solutions to past problems (bugs, patterns, tooling decisions) live in `docs/solutions/`, organized by category with YAML frontmatter (`module`, `tags`, `problem_type`) — relevant when implementing or debugging in areas that may have been documented before.
