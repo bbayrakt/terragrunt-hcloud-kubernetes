@@ -15,6 +15,23 @@ locals {
   # Git-ignored, stack-local file the before_hook below writes the ArgoCD admin password into.
   # Never committed (see repo .gitignore). Read by the generated provider block via file()/try().
   argocd_admin_password_file = "${get_terragrunt_dir()}/.argocd-admin-password"
+
+  # Explicit kubernetes{} connection details (host/CA/client cert), extracted directly from the
+  # kubeconfig file, rather than relying on the argocd provider's own config_path kubeconfig
+  # parsing. Found via live validation: this provider version fails port-forward setup against
+  # this cluster's (Talos-generated, ECDSA) CA when using config_path alone ("x509: certificate
+  # signed by unknown authority... ECDSA verification failure"), but works when the host/CA/
+  # client cert are passed explicitly -- matches the pattern the provider's own community issues
+  # use for non-config_path clusters (e.g. EKS). Wrapped in try() with empty-string fallbacks so
+  # offline `terragrunt hcl validate`/`format` stay static-safe when no kubeconfig exists yet.
+  # Note: Terragrunt locals cannot reference `dependency.*` outputs, so this always reads from
+  # the fallback path (which is what `dependency.kubernetes_cluster.outputs.kubeconfig_path`
+  # resolves to in practice once that stack has been applied).
+  kubeconfig_data     = try(yamldecode(file(local.fallback_kubeconfig_path)), null)
+  k8s_api_host        = try(local.kubeconfig_data.clusters[0].cluster.server, "")
+  k8s_cluster_ca_cert = try(base64decode(local.kubeconfig_data.clusters[0].cluster["certificate-authority-data"]), "")
+  k8s_client_cert     = try(base64decode(local.kubeconfig_data.users[0].user["client-certificate-data"]), "")
+  k8s_client_key      = try(base64decode(local.kubeconfig_data.users[0].user["client-key-data"]), "")
 }
 
 terraform {
@@ -104,10 +121,16 @@ terraform {
 provider "argocd" {
   port_forward_with_namespace = "argocd"
   plain_text                  = true
-  config_path                 = "${try(dependency.kubernetes_cluster.outputs.kubeconfig_path, local.fallback_kubeconfig_path)}"
 
   username = "admin"
   password = trimspace(try(file("${local.argocd_admin_password_file}"), "placeholder-for-validate"))
+
+  kubernetes {
+    host                   = ${jsonencode(local.k8s_api_host)}
+    cluster_ca_certificate = ${jsonencode(local.k8s_cluster_ca_cert)}
+    client_certificate     = ${jsonencode(local.k8s_client_cert)}
+    client_key             = ${jsonencode(local.k8s_client_key)}
+  }
 }
 EOF
 }

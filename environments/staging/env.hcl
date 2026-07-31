@@ -179,10 +179,15 @@ inputs = {
     # Platform-tier AGE private key for KSOPS, mounted into argocd-repo-server (see the argocd
     # chart's `repoServer` values below). Namespace already exists via the argocd chart itself,
     # so create_namespace = false (matching the cloudflare-api-key pattern above).
+    # Platform-tier AGE private key for KSOPS, mounted into argocd-repo-server (see the argocd
+    # chart's `repoServer` values below). create_namespace = true: on a fresh cluster this secret
+    # is created before the argocd Helm release itself creates the `argocd` namespace, so it must
+    # ensure the namespace exists rather than assume it (found via live deploy validation --
+    # assuming the chart "already creates it" was wrong for a first-time apply).
     platform-sops-age-key = {
       name             = "platform-sops-age-key"
       namespace        = "argocd"
-      create_namespace = false
+      create_namespace = true
       data = {
         "keys.txt" = local.secrets.platform_sops_age_private_key
       }

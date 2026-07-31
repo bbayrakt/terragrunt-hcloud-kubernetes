@@ -82,6 +82,12 @@ resource "argocd_project" "platform" {
 ## from cascade-deleting live resources now that Terraform's prevent_destroy safety net has been
 ## handed off to ArgoCD for these charts.
 resource "argocd_application_set" "apps" {
+  # Found via live apply: ArgoCD's API validates an ApplicationSet's referenced project at
+  # creation time; without this, Terraform's default parallel resource creation can attempt to
+  # create the ApplicationSet before the argocd_project transaction is visible, failing with
+  # "ApplicationSet references project apps which does not exist".
+  depends_on = [argocd_project.apps]
+
   metadata {
     name = "apps"
   }
@@ -151,6 +157,8 @@ resource "argocd_application_set" "apps" {
 }
 
 resource "argocd_application_set" "platform" {
+  depends_on = [argocd_project.platform]
+
   metadata {
     name = "platform"
   }
