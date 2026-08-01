@@ -79,11 +79,12 @@ content) and is explicitly out of scope here (see Scope Boundaries).
   none of which this plan touches. `apps/` and `platform/` are created here only as empty,
   git-trackable skeletons (a short `README.md` each) so the layout exists and is discoverable.
 - Adding a `.sops.yaml` creation rule for `platform/**/*.sops.yaml` is not done in this plan —
-  there is no platform-tier content yet to govern. The platform-tier AGE key pair itself already
-  exists (`platform_sops_age_private_key` is already present in `secrets.yaml`/`secrets.yaml.example`
-  and already mounted into `argocd-repo-server` by the prior, already-merged migration — confirmed
-  by inspection, not deferred work); only the `.sops.yaml` *rule* referencing it is pending, once
-  real platform-tier content exists to match against.
+  there is no platform-tier content yet to govern. **Correction from an earlier revision of this
+  plan:** the platform-tier AGE key pair was previously claimed to already exist based on the
+  `platform_sops_age_private_key` field being present in `secrets.yaml`; decrypting the actual
+  value during execution showed it is still a literal placeholder (`AGE-SECRET-KEY-CHANGEME`), not
+  a real generated key. Generating the real key pair remains deferred, alongside the `.sops.yaml`
+  rule, until real platform-tier content exists to match against.
 - The pre-existing dead references to `scripts/sync_kubernetes_wrapper.py` (`Makefile`'s
   `sync-k8s-wrapper` target) predate this plan and are unrelated to the move; left alone.
 - Production has no `argocd-gitops` stack and no `gitops_*` inputs today (R15 of the origin doc),
@@ -106,9 +107,10 @@ content) and is explicitly out of scope here (see Scope Boundaries).
 
 - Authoring real `apps/`/`platform/` GitOps content per `docs/gitops-repo-scaffold.md`: separate,
   later increment (depends on live cluster + Sealed Secrets controller).
-- Adding the `.sops.yaml` rule for `platform/**/*.sops.yaml`: bundled with the content-authoring
-  work above, since there's nothing to match until real platform-tier files exist (the AGE key
-  pair itself already exists — see Scope Boundaries).
+- Generating the real platform-tier AGE key pair (currently a placeholder,
+  `AGE-SECRET-KEY-CHANGEME`) and adding the `.sops.yaml` rule for `platform/**/*.sops.yaml`:
+  bundled with the content-authoring work above, since there's nothing to match or decrypt until
+  real platform-tier files exist.
 - Deciding where a future `scripts/sync_kubernetes_wrapper.py` would live (`infra/scripts/` vs.
   true-root `scripts/`): open, unrelated to this plan; the target script does not exist today.
 
@@ -610,7 +612,7 @@ R19's scope — without this wiring, an operator could never actually pass a non
 
 ---
 
-- [ ] U5. **Repoint staging's ArgoCD GitOps registration to self-reference this repo**
+- [x] U5. **Repoint staging's ArgoCD GitOps registration to self-reference this repo**
 
 **Goal:** Update `gitops_repo_url` (and its SSH credential) in staging's encrypted `secrets.yaml`
 so the live `argocd_repository`/`ApplicationSet` resources point at this repo instead of an
@@ -729,13 +731,14 @@ regression risk (see Institutional Learnings) that only manifests at live apply 
   invariant):** ArgoCD's repo-server read-access boundary expands from what would have been a
   dedicated GitOps-only repo to this entire monorepo — `infra/`'s Terraform source and
   `infra/secrets.yaml`'s SOPS ciphertext included (see Risks & Dependencies for the accepted
-  read-breadth tradeoff and the separately-mitigated write/escalation axis). The already-mounted
-  platform-tier AGE key and the Terragrunt/root secrets now share one exec-capable
-  `argocd-repo-server` process/filesystem context, where before they would have been two
-  separately-scoped exposure surfaces (see Risks & Dependencies). `sync_policy.automated.self_heal`
-  on both `ApplicationSet`s is unchanged as code but goes from practically dormant (while
-  `gitops_repo_url` is unset/placeholder, pre-U5) to live for the first time as of U5 — a runtime
-  behavioral activation, not merely a configurability change.
+  read-breadth tradeoff and the separately-mitigated write/escalation axis). The KSOPS
+  repo-server patch's *mount mechanism* is already live (a Kubernetes Secret sourced from
+  `platform_sops_age_private_key`), but that key's actual value is still a placeholder as of this
+  plan (see Scope Boundaries) — so the platform-tier/Terragrunt-secrets blast-radius collapse
+  described in the origin brainstorm becomes real only once a genuine key is generated, not yet.
+  `sync_policy.automated.self_heal` on both `ApplicationSet`s is unchanged as code but goes from
+  practically dormant (while `gitops_repo_url` is unset/placeholder, pre-U5) to live for the first
+  time as of U5 — a runtime behavioral activation, not merely a configurability change.
 
 ---
 
