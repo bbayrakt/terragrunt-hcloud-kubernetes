@@ -215,8 +215,17 @@ resource "argocd_application_set" "platform" {
             allow_empty = false
           }
 
+          # ServerSideApply=true (found via live U6 testing): the gha-runner-scale-set-controller
+          # chart's CRDs (autoscalinglisteners.actions.github.com etc.) are large enough that
+          # client-side apply's kubectl.kubernetes.io/last-applied-configuration annotation
+          # exceeds Kubernetes' 262144-byte annotation limit, failing every sync attempt with
+          # "metadata.annotations: Too long". Server-side apply never writes that annotation, so
+          # it isn't subject to the limit -- a known issue with this chart's CRDs specifically,
+          # not a platform-tier-wide requirement, but scoped here since platform is the tier where
+          # CRD-installing apps live by design (R7).
           sync_options = [
             "CreateNamespace=true",
+            "ServerSideApply=true",
           ]
         }
       }
