@@ -17,9 +17,12 @@ beyond the bootstrap charts (see `docs/gitops-repo-scaffold.md`).
 ├── AGENTS.md
 ├── README.md
 ├── apps/
-│   └── README.md
+│   ├── README.md
+│   └── arc-runners/
 ├── platform/
-│   └── README.md
+│   ├── README.md
+│   ├── arc-systems/
+│   └── sealed-secrets/
 ├── docs/
 │   ├── brainstorms/
 │   ├── plans/

@@ -1,6 +1,6 @@
 ---
 date: 2026-07-30
-amended: 2026-08-01
+amended: 2026-08-02
 topic: argocd-gitops-migration
 ---
 
@@ -124,6 +124,7 @@ This means every future chart addition requires a Terraform change, and there's 
 - **Cluster-scoped resource creation is the enforcement axis, not the templating engine**: both tiers can contain Helm-chart-based or Kustomize-based apps; what differs is the `AppProject`'s `cluster_resource_whitelist`/`blacklist`, which inspects the rendered manifest's kind regardless of how it was templated.
 - **ArgoCD/Helm owns CRDs for ArgoCD-managed charts**: simpler than extending the existing Terraform `crds` stack to track a second, disjoint set of charts; accepted trade-off is losing that stack's `prevent_destroy` CRD safety net for these two charts specifically.
 - **Two dedicated AGE keys (one per tier), separate from this repo's Terragrunt AGE key**: control who can *author/encrypt* secrets for which tier locally. Note: in-cluster, `argocd-repo-server` still needs both private keys available to decrypt either tier's manifests, since one repo-server renders both paths — the separation is an authoring-side boundary, not an in-cluster decrypt-time boundary.
+- **`apps`-tier `Role`/`RoleBinding` creation allowed, not blacklisted (amended 2026-08-02, found during U7 execution)**: R4's original design blacklisted both kinds entirely to prevent an apps-tier app from binding a pre-existing, possibly-dangerous `ClusterRole` to escalate. But `gha-runner-scale-set` needs to create its own self-contained, namespace-scoped `Role`+`RoleBinding` granting the platform-tier controller's ServiceAccount (a different namespace) permission to manage runner Pods — the standard ARC cross-namespace pattern, not a reference to any pre-existing `ClusterRole`. ArgoCD's `namespace_resource_blacklist` is kind-level only, with no `roleRef`-aware check, so it can't distinguish this legitimate case from the actual escalation vector R4 targeted — there's no narrower ArgoCD-native middle ground. **Accepted risk, solo-operator scope only** (same treatment as the shared-KSOPS-decrypt-key risk below): a future apps-tier manifest could in principle bind a pre-existing powerful `ClusterRole` (e.g. `cluster-admin`) via `RoleBinding` to escalate cluster-scoped access. Revisit with a `roleRef`-aware admission policy (Kyverno/OPA) if/when a collaborator with apps/-only push access is introduced. Considered and rejected: moving `gha-runner-scale-set` to the `platform` tier instead — `platform` already carries *more* cluster-scoped privilege, so that trades a smaller risk for a strictly bigger one.
 - **Sealed Secrets over OpenBao for the `apps` tier**: OpenBao is fully self-hostable but requires a genuinely stateful service (storage backend, unsealing, HA, upgrades) plus External Secrets Operator to actually land values in Kubernetes — non-trivial operational cost for routine app secrets with no stated need for dynamic/leased credentials or an audit trail. Sealed Secrets is a single controller, needs no ArgoCD repo-server patch (a `SealedSecret` is just another manifest ArgoCD applies normally), and adds a bonus name+namespace scoping guardrail on top.
 - **Sealed Secrets controller deployed via ArgoCD (`platform` tier), not Terragrunt**: it needs cluster-scoped resources (CRD, `ClusterRole`) to install, but isn't a bootstrap dependency — it can be one of the first `platform`-tier apps ArgoCD deploys once the stack is live, keeping it out of Terraform's Helm footprint.
 - **Staging only**: production's `helm_charts`/`helm_secrets` maps don't exist yet; bringing production to parity is a distinct, deferred effort.
@@ -143,6 +144,60 @@ This means every future chart addition requires a Terraform change, and there's 
 
 ---
 
+## Amendment (2026-08-02): Resuming execution of U5-U7
+
+U1-U4 (ArgoCD provider bootstrap, `apps`/`platform` `AppProject`s, `ApplicationSet`s, KSOPS patch)
+are confirmed applied and live against staging's current cluster. `infra/environments/staging/env.hcl`
+no longer references `arc`/`runner`/`scale-set` anywhere -- the Terraform-side removal (R7/R8) is
+already fully landed, so there is no remaining Terraform-state disowning step for these two charts.
+This amendment resolves the remaining execution-readiness questions for
+`docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md`'s U5 (Sealed Secrets bootstrap),
+U6 (ARC controller -> `platform/arc-systems/`), and U7 (ARC scale-set -> `apps/arc-runners/`),
+which remain the plan's only unchecked units.
+
+- Staging's Kubernetes cluster is live right now (Gateway API/load balancer are not deployed, but
+  U1-U4's port-forward-based ArgoCD access has no dependency on either, per R2).
+- Real config values for U7 already exist in `infra/secrets.yaml`: `github_config_url` is a real
+  org URL (not the scaffold doc's placeholder), and `github_token` is present and must be sealed
+  via `kubeseal` once Sealed Secrets (U5) is live -- never written to git in plaintext. No
+  `github_runner_group` override is set, so the plan's defaults (`runnerGroup: "Default"`,
+  `minRunners: 1`) are the real desired config, not placeholders needing replacement.
+- **Gap found (does not block U5-U7):** `infra/secrets.yaml`'s `platform_sops_age_private_key` is
+  still the literal placeholder `AGE-SECRET-KEY-CHANGEME`, despite U4 being checked off as applied.
+  Neither U6 (`platform/arc-systems/` has no values) nor U7 (Sealed Secrets, not SOPS) needs a
+  working KSOPS key, so this doesn't block this increment -- but KSOPS decryption is currently
+  non-functional for any *other* `platform`-tier app needing a SOPS-encrypted value. Generating a
+  real key pair (`age-keygen`) is deferred follow-up work, not part of this increment unless the
+  user pulls it in.
+
+**Execution completed (2026-08-02):** U5, U6, and U7 are all live on staging --
+`platform-sealed-secrets`, `platform-arc-systems`, and `apps-arc-runners` are all Synced/Healthy,
+and the runner Pod is confirmed connected to GitHub and listening for jobs. Four real gaps were
+found and fixed during live execution (all in `infra/modules/argocd-gitops/`, none anticipated by
+this document or the plan except the last one):
+
+1. Neither AppProject whitelisted `Namespace`, so `CreateNamespace=true` failed for every
+   platform-tier and apps-tier app's first sync -- added an explicit `Namespace` whitelist entry
+   to both tiers (removed the `apps` tier's redundant `cluster_resource_blacklist{*/*}`, which
+   would otherwise have re-excluded the new whitelist entry).
+2. `gha-runner-scale-set-controller`'s CRDs exceed Kubernetes' 262144-byte `last-applied-
+   configuration` annotation limit under client-side apply (a known upstream actions-runner-
+   controller issue) -- added `ServerSideApply=true` to the `platform` `ApplicationSet`.
+3. `gha-runner-scale-set`'s cross-namespace controller-ServiceAccount auto-discovery (Helm
+   `lookup()`) only searches its own release namespace -- set `controllerServiceAccount.name`/
+   `.namespace` explicitly in `apps/arc-runners/values.yaml`.
+4. The `apps` `AppProject`'s blanket `Role`/`RoleBinding` blacklist (R4's anti-escalation design)
+   also blocked this chart's own legitimate namespace-scoped manager `Role`/`RoleBinding` --
+   removed the blacklist as an accepted solo-operator risk, decided with the user (see Key
+   Decisions below); and downgraded `apps_pod_security_level` from `restricted` to `baseline`
+   for the same namespace, which this document's origin plan had already anticipated as a
+   contingency in U7's Test scenarios.
+
+See `docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md` (now `status: completed`)
+for the full per-unit implementation notes.
+
+---
+
 ## Outstanding Questions
 
 ### Resolve Before Planning
@@ -157,7 +212,7 @@ This means every future chart addition requires a Terraform change, and there's 
 - [Affects R11][Technical] SSH deploy key vs. HTTPS token for the `argocd_repository` credential to the new GitOps repo?
 - [Affects R12][Technical] Exact KSOPS version/image pin and the specific `argo-cd` chart values needed to patch `repo-server` for the currently pinned chart version (`9.4.5`).
 - [Affects R14][Needs research] Sealed Secrets scope mode (default name+namespace vs. `namespace-wide`) and where its own Helm values/version are declared once it's a `platform`-tier app.
-- [Affects R9][Technical] How does the existing `github-arc-pat` secret (currently pre-created by the Terraform `helm-charts` module) get re-homed once `gha-runner-scale-set` moves to the `apps` tier — as a `SealedSecret` authored in the GitOps repo, or still Terraform-created and referenced?
+- [Affects R9][Resolved 2026-08-02] How does the existing `github-arc-pat` secret get re-homed once `gha-runner-scale-set` moves to the `apps` tier? **As a `SealedSecret`** authored in `apps/arc-runners/templates/sealed-secret.yaml`, generated via `kubeseal` against the live Sealed Secrets controller from the real `github_token` in `infra/secrets.yaml`.
 - [Affects R16][Technical] Exact sequence of `git mv` operations and path-reference updates (`AGENTS.md`, `README.md`, `Makefile`, `setup.sh`, `root.hcl`'s `find_in_parent_folders` calls) needed to relocate Terraform/Terragrunt into `infra/` without breaking anything.
 - [Affects R16][Needs research] Verify that moving `root.hcl` + `environments/` + `modules/` together into `infra/` preserves `path_relative_to_include()`-derived S3 remote-state keys exactly (expected: yes, since the relative structure between `root.hcl` and its children is unchanged) — confirm via a no-op `terragrunt plan` per stack immediately after the move, before the next real `apply`.
 - [Affects R11, R20][Technical] Whether to generate a brand-new read-only SSH deploy key scoped to this repo for ArgoCD, and how it's added on GitHub (repo deploy key vs. a machine user), given `gitops_repo_url` now self-references this repo.
@@ -167,4 +222,7 @@ This means every future chart addition requires a Terraform change, and there's 
 
 ## Next Steps
 
--> `/ce-plan` for structured implementation planning
+Execution complete (U5-U7 all live and verified) -- see the 2026-08-02 amendment above.
+Remaining open items are the ones listed under Deferred to Planning that weren't resolved during
+execution (repo-layout `git mv` sequencing, SSH deploy key provisioning, etc.), none of which
+block this document's own scope.
