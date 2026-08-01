@@ -54,7 +54,14 @@ variable "apps_destination_namespaces" {
 variable "apps_pod_security_level" {
   description = "Pod Security Standard level applied to `apps`-tier namespaces via managed_namespace_metadata (restricted or baseline)"
   type        = string
-  default     = "restricted"
+  # Downgraded from "restricted" during live U7 testing, per the plan's own anticipated
+  # contingency (docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md U7 Test
+  # scenarios): gha-runner-scale-set's runner Pod
+  # (ghcr.io/actions/actions-runner:latest) needs allowPrivilegeEscalation, Linux capabilities,
+  # and non-restricted seccomp/runAsNonRoot -- "restricted" rejected it outright at admission.
+  # Only one apps-tier namespace exists today (arc-runners), so this affects exactly that
+  # namespace; revisit per-namespace if a future apps-tier app needs "restricted" again.
+  default = "baseline"
 }
 
 variable "platform_destination_namespaces" {
