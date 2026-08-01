@@ -29,12 +29,10 @@ beyond the bootstrap charts (see `docs/gitops-repo-scaffold.md`).
 │   ├── solutions/
 │   └── gitops-repo-scaffold.md
 └── infra/
-    ├── Makefile
     ├── keys.txt
     ├── root.hcl
     ├── secrets.yaml
     ├── secrets.yaml.example
-    ├── setup.sh
     ├── environments/
     │   ├── production/
     │   │   ├── env.hcl
@@ -123,18 +121,15 @@ You also need:
 
 ## Quick start
 
-From `infra/`:
+From `infra/`, generate an AGE key pair and export it for SOPS:
 
 ```bash
 cd infra
-./setup.sh
+age-keygen -o keys.txt
+export SOPS_AGE_KEY_FILE="$(pwd)/keys.txt"
 ```
 
-Then ensure your SOPS key is exported (required before validation commands):
-
-```bash
-export SOPS_AGE_KEY_FILE="$(git rev-parse --show-toplevel)/infra/keys.txt"
-```
+Update `.sops.yaml`'s `age:` recipient (repo root) with the public key `age-keygen` printed above.
 
 If `secrets.yaml` is missing, create it from template and encrypt it (from `infra/`):
 
@@ -165,6 +160,39 @@ ArgoCD from this same repository's top-level `apps/`/`platform/` directories, no
 See `docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md`,
 `docs/brainstorms/argocd-gitops-migration-requirements.md`'s 2026-08-01 amendment, and
 `docs/gitops-repo-scaffold.md` for the full design and required conventions.
+
+### One-command apply/destroy (recommended)
+
+Each stack's `terragrunt.hcl` declares its dependencies (`dependencies { paths = [...] }` and, where
+outputs are consumed, `dependency "kubernetes_cluster" { ... mock_outputs ... }`) so Terragrunt's
+whole-environment commands sequence every stack correctly without any manual per-stack ordering:
+
+```bash
+cd infra/environments/staging   # or production
+terragrunt apply --all          # applies in the order above; add --non-interactive to skip prompts
+terragrunt destroy --all        # destroys in exact reverse order
+terragrunt plan --all           # plan-only, safe to run any time
+```
+
+Notes:
+- This repo's pinned Terragrunt version removed `terragrunt run-all <cmd>` with no backward-compat
+  shim; use the `<cmd> --all` form shown above (equivalently `terragrunt run --all <cmd>`).
+- No resource in this repo carries a `prevent_destroy` lifecycle guard (removed 2026-08-02, a
+  deliberate choice to keep `destroy --all` a genuine one-command full teardown) -- review
+  `terragrunt plan --all` output before applying if you're not intending a full teardown, since a
+  config change that happens to touch a CRD or a shared secret's namespace will now destroy it
+  silently instead of erroring loudly.
+- `dependency "kubernetes_cluster" { mock_outputs = ... }` blocks let Terragrunt resolve every
+  downstream stack's config even when `kubernetes-cluster` has no state yet (fresh environment) or
+  no longer has state (already destroyed) -- the mock is only ever used when the real dependency
+  output is genuinely unavailable; a live, applied cluster's real outputs always take precedence.
+- After a full `destroy --all`, also remove the environment's now-stale local kubeconfig/talosconfig
+  files (`infra/environments/<env>/kubeconfig*`, `talosconfig*`) -- Terraform/Terragrunt state is
+  clean at that point, but these local files are separate artifacts the cluster module doesn't
+  clean up on destroy, and a stale kubeconfig can cause a confusing connection-timeout error on the
+  next `plan`/`apply` before the fresh cluster's own kubeconfig is written.
+
+### Manual per-stack sequence (for granular control)
 
 Example (`staging`, from `infra/`):
 
@@ -202,20 +230,6 @@ cd infra/environments/staging/kubernetes-cluster && terragrunt validate
 cd infra/environments/production/kubernetes-cluster && terragrunt validate
 cd infra/environments/staging/gateway-api && terragrunt validate
 cd infra/environments/production/gateway-api && terragrunt validate
-```
-
-## Common Make targets
-
-Invoke via `make -C infra <target>` from the repository root, or `cd infra && make <target>`:
-
-```bash
-make -C infra setup
-make -C infra edit-secrets
-make -C infra view-secrets
-
-make -C infra plan ENV=staging MODULE=kubernetes-cluster
-make -C infra apply ENV=staging MODULE=kubernetes-cluster
-make -C infra validate ENV=staging MODULE=gateway-api
 ```
 
 ## Notes
