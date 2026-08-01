@@ -3,3 +3,17 @@ sealed-secrets:
   image:
     registry: ghcr.io
     repository: bitnami/sealed-secrets-controller
+  # Explicit resource requests/limits (docs/resource-management-policy.md): CPU request only, no
+  # CPU limit (avoids throttling on spare node capacity; memory OOM-kill is the real crash risk
+  # this closes, not CPU contention). The pinned chart version (2.19.1) has no `resourcesPreset`
+  # mechanism at all -- confirmed via `helm show values` -- so these values are set from a
+  # genuinely empty default, not by overriding a preset. Starting values are a conservative,
+  # research-grounded estimate for this small, resource-constrained cluster (see
+  # docs/plans/2026-08-01-002-feat-helm-chart-resource-management-plan.md); refine via VPA
+  # recommender data (platform/sealed-secrets/templates/vpa.yaml) once it has accumulated history.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
