@@ -217,10 +217,15 @@ resource "argocd_application_set" "platform" {
   }
 }
 
-## GitOps repository registration -- read-only SSH deploy key, credential sourced from
-## secrets.yaml the same way every other secret in this repo already is.
+## GitOps repository registration -- supports three auth modes, selected by which variables are
+## set: SSH deploy key (gitops_repo_ssh_private_key; username is hardcoded to "git" per SSH
+## convention, regardless of gitops_repo_username), HTTPS credential auth (gitops_repo_username +
+## gitops_repo_password, e.g. a personal access token), or no credentials at all for a public
+## HTTPS repository (all three left null/default). Credential sourced from secrets.yaml the same
+## way every other secret in this repo already is.
 resource "argocd_repository" "gitops" {
   repo            = var.gitops_repo_url
-  username        = "git"
+  username        = var.gitops_repo_ssh_private_key != null ? "git" : var.gitops_repo_username
+  password        = var.gitops_repo_ssh_private_key != null ? null : var.gitops_repo_password
   ssh_private_key = var.gitops_repo_ssh_private_key
 }

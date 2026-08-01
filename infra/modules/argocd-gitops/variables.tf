@@ -1,12 +1,26 @@
 variable "gitops_repo_url" {
-  description = "URL of the GitOps content repository — either this repo's own SSH URL (self-referencing monorepo) or a separate, dedicated GitOps repository. Both topologies are equally supported; only the value differs."
+  description = "URL of the GitOps content repository — either this repo's own URL (self-referencing monorepo) or a separate, dedicated GitOps repository. Both topologies are equally supported; only the value differs. Use an SSH URL (git@...) with gitops_repo_ssh_private_key, or an HTTPS URL with gitops_repo_username/gitops_repo_password (or neither, for a public HTTPS repository)."
   type        = string
 }
 
 variable "gitops_repo_ssh_private_key" {
-  description = "SSH deploy key (read-only) used by ArgoCD to pull the GitOps repository"
+  description = "SSH deploy key (read-only) used by ArgoCD to pull the GitOps repository over SSH. Leave null (the default) when using HTTPS auth (gitops_repo_username/gitops_repo_password) or a public HTTPS repository with no credentials."
   type        = string
   sensitive   = true
+  default     = null
+}
+
+variable "gitops_repo_username" {
+  description = "Username for HTTPS credential auth against the GitOps repository (e.g. paired with a personal access token in gitops_repo_password). Ignored when gitops_repo_ssh_private_key is set, since SSH auth always uses the \"git\" username by convention. Leave null for a public HTTPS repository with no credentials."
+  type        = string
+  default     = null
+}
+
+variable "gitops_repo_password" {
+  description = "Password or personal access token for HTTPS credential auth against the GitOps repository, paired with gitops_repo_username. Ignored when gitops_repo_ssh_private_key is set. Leave null for a public HTTPS repository with no credentials."
+  type        = string
+  sensitive   = true
+  default     = null
 }
 
 variable "gitops_apps_path" {

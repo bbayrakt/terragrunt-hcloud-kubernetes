@@ -36,10 +36,20 @@ rationale (origin: `docs/brainstorms/argocd-gitops-migration-requirements.md`).
 module "argocd_gitops" {
   source = "../../../modules/argocd-gitops"
 
-  # Either this repo's own SSH URL (self-referencing monorepo) or a separate dedicated repo --
+  # Either this repo's own URL (self-referencing monorepo) or a separate dedicated repo --
   # both topologies are equally supported.
-  gitops_repo_url             = "git@github.com:org/this-or-another-repo.git"
+  gitops_repo_url = "git@github.com:org/this-or-another-repo.git"
+
+  # Auth mode 1: SSH deploy key (matches an SSH-form gitops_repo_url above).
   gitops_repo_ssh_private_key = local.secrets.gitops_repo_ssh_private_key
+
+  # Auth mode 2 (alternative to the above): HTTPS username + password/PAT, for an
+  # https://... gitops_repo_url. Leave gitops_repo_ssh_private_key unset (null) when using this.
+  # gitops_repo_username = local.secrets.gitops_repo_username
+  # gitops_repo_password = local.secrets.gitops_repo_password
+
+  # Auth mode 3 (alternative to both above): no credentials at all, for a public HTTPS repo --
+  # just set gitops_repo_url to the https:// URL and leave all three credential variables unset.
 
   # Optional -- default to "apps"/"platform"; override if the GitOps repo uses different
   # top-level directory names for either tier.
@@ -50,6 +60,15 @@ module "argocd_gitops" {
   platform_destination_namespaces = ["arc-systems", "kube-system"]
 }
 ```
+
+### Choosing an auth mode
+
+`argocd_repository`'s `username`/`password`/`ssh_private_key` are all optional on the underlying
+ArgoCD provider resource -- a public repository needs none of them. This module picks the mode
+automatically from which variables are set: if `gitops_repo_ssh_private_key` is non-null, it wins
+(username is hard-coded to `"git"`, the SSH convention, and any `gitops_repo_username` is
+ignored); otherwise `gitops_repo_username`/`gitops_repo_password` are used verbatim, which may
+both be null for a public HTTPS repository.
 
 ## Provider authentication
 
