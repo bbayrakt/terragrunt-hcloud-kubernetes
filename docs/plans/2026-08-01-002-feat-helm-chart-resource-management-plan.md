@@ -1,7 +1,7 @@
 ---
 title: "feat: Helm Chart Resource Requests/Limits Policy + Recommender-Only VPA"
 type: feat
-status: active
+status: completed
 date: 2026-08-01
 deepened: 2026-08-01
 origin: docs/brainstorms/helm-chart-resource-management-requirements.md
@@ -322,7 +322,7 @@ forward) — both carried forward; F1's steps are refined per the R5/R7 correcti
 
 ## Implementation Units
 
-- [ ] U1. **Retrofit `platform/sealed-secrets` with explicit resources**
+- [x] U1. **Retrofit `platform/sealed-secrets` with explicit resources**
 
 **Goal:** Set explicit CPU/memory values on the Sealed Secrets controller — **corrected during
 document review:** the pinned chart version (`2.19.1`) has no `resourcesPreset` mechanism at all
@@ -366,7 +366,7 @@ values from nothing, not from a preset override.
 
 ---
 
-- [ ] U2. **Retrofit `platform/arc-systems` with explicit resources**
+- [x] U2. **Retrofit `platform/arc-systems` with explicit resources**
 
 **Goal:** Set explicit CPU/memory requests+limit on the GitHub Actions Runner Controller's
 controller Deployment.
@@ -403,7 +403,7 @@ controller Deployment.
 
 ---
 
-- [ ] U3. **Retrofit `platform/arc-runners`: hand-authored `dind` spec, resources, sized `emptyDir`**
+- [x] U3. **Retrofit `platform/arc-runners`: hand-authored `dind` spec, resources, sized `emptyDir`**
 
 **Goal:** Replace the currently-unset `containerMode` with an explicit, hand-authored `dind` pod
 spec carrying resource requests/limits on both containers and `sizeLimit` on all three `emptyDir`
@@ -485,7 +485,7 @@ spec:
 
 ---
 
-- [ ] U4. **Register the `vpa` destination namespace in the `platform` tier's Terraform allow-list**
+- [x] U4. **Register the `vpa` destination namespace in the `platform` tier's Terraform allow-list**
 
 **Goal:** Extend `platform_destination_namespaces` so a new `platform/vpa/` GitOps directory is
 permitted to sync, before that directory is authored.
@@ -520,7 +520,7 @@ permitted to sync, before that directory is authored.
 
 ---
 
-- [ ] U5. **Author `platform/vpa/` wrapper chart (Recommender-only)**
+- [x] U5. **Author `platform/vpa/` wrapper chart (Recommender-only)**
 
 **Goal:** Install the VPA Recommender component (and its CRD/RBAC) as a new `platform`-tier chart,
 with the Updater and admission-controller explicitly disabled.
@@ -578,7 +578,7 @@ with the Updater and admission-controller explicitly disabled.
 
 ---
 
-- [ ] U6. **Add per-workload `VerticalPodAutoscaler` CR objects (`sealed-secrets` and `arc-systems` only)**
+- [x] U6. **Add per-workload `VerticalPodAutoscaler` CR objects (`sealed-secrets` and `arc-systems` only)**
 
 **Goal:** Create one recommendation-only `VerticalPodAutoscaler` object per workload that VPA can
 actually target, so usage data begins accumulating.
@@ -644,7 +644,7 @@ authoring blocker since ArgoCD's `self_heal` will retry a transient admission fa
 
 ---
 
-- [ ] U7. **Write the resource-management convention doc**
+- [x] U7. **Write the resource-management convention doc**
 
 **Goal:** Capture the CPU/memory/`emptyDir` policy, VPA recommender-only usage, KEDA/HPA/VPA
 decision criteria, and operational notes so a future contributor can follow this policy without
@@ -685,7 +685,7 @@ final shape before being considered complete)
 
 ---
 
-- [ ] U8. **Reference the convention doc from `apps/README.md` and `platform/README.md`**
+- [x] U8. **Reference the convention doc from `apps/README.md` and `platform/README.md`**
 
 **Goal:** Make the new convention doc discoverable the same way `docs/gitops-repo-scaffold.md` and
 the migration-requirements brainstorm already are.
