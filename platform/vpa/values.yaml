@@ -1,0 +1,35 @@
+vertical-pod-autoscaler:
+  # Recommender-only install (docs/resource-management-policy.md, docs/plans/2026-08-01-002-feat-
+  # helm-chart-resource-management-plan.md U5): the Updater and admission-controller components are
+  # explicitly disabled so this installation can never auto-apply a recommendation or auto-restart
+  # a pod -- combined with `updatePolicy.updateMode: "Off"` on every VerticalPodAutoscaler object
+  # (see platform/sealed-secrets/templates/vpa.yaml, platform/arc-systems/templates/vpa.yaml), this
+  # is defense-in-depth: neither the component nor the object-level config alone would need to fail
+  # for this to stay recommendation-only.
+  #
+  # Accepted risk: this is the official upstream kubernetes/autoscaler chart, which currently ships
+  # with its own README warning that it is "not ready for production use." Recommender-only mode
+  # bounds the blast radius of any chart immaturity to "recommendations might be wrong or missing,"
+  # never "a pod gets mutated or restarted" -- this is judged an acceptable tradeoff over switching
+  # to a less-official community chart.
+  updater:
+    enabled: false
+  admissionController:
+    enabled: false
+  recommender:
+    replicas: 1
+    # Upstream defaults to 2 replicas + a PodDisruptionBudget (minAvailable: 1). On staging's
+    # single static node plus Karpenter-provisioned elastic nodes, a 2-replica PDB risks
+    # deadlocking a Karpenter drain if both replicas land on the same node (anti-affinity here is
+    # only `preferred`, not `required`), and running 2 replicas of a non-critical, no-SLA
+    # recommendation-only component contradicts this effort's own resource-conservation goal.
+    podDisruptionBudget:
+      enabled: false
+    resources:
+      # CPU request only, no CPU limit (avoids throttling on spare node capacity); memory
+      # request/limit kept at the upstream chart's own documented default for this component.
+      requests:
+        cpu: 50m
+        memory: 500Mi
+      limits:
+        memory: 1000Mi
