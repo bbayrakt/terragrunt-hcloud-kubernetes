@@ -1,0 +1,5 @@
+sealed-secrets:
+  fullnameOverride: sealed-secrets-controller
+  image:
+    registry: ghcr.io
+    repository: bitnami/sealed-secrets-controller

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: sealed-secrets-wrapper
+version: 0.1.0
+dependencies:
+  - name: sealed-secrets
+    version: "2.19.1"
+    repository: "https://bitnami.github.io/sealed-secrets"
