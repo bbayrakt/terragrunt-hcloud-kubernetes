@@ -1,0 +1,46 @@
+# Recommendation-only VerticalPodAutoscaler (docs/resource-management-policy.md,
+# docs/plans/2026-08-01-002-feat-helm-chart-resource-management-plan.md U6). Static manifest, not
+# chart-templated -- mirrors platform/arc-runners/templates/sealed-secret.yaml's precedent for
+# adding non-chart-generated content inside a wrapper chart's templates/ directory. No
+# metadata.namespace is set: this manifest is applied as part of the arc-systems Application, so it
+# inherits that Application's already-whitelisted destination namespace at apply time -- VPA's
+# targetRef requires same-namespace with its target, and this keeps it that way without a
+# cross-namespace concern. Requires platform/vpa/ (the Recommender + CRD) to be synced first for
+# this object to validate against the API server; if it lands first, ArgoCD's self_heal retries it
+# on the next reconcile rather than failing permanently.
+#
+# NOTE: arc-runners deliberately has NO equivalent VPA object. Its actual runner workload is an
+# AutoscalingRunnerSet CRD instance (verified via a live `helm template` of the pinned chart --
+# no Deployment/ReplicaSet/StatefulSet is ever rendered), reconciled into ephemeral per-job pods at
+# runtime outside anything Helm renders; neither ARC CRD defines a /scale subresource, so VPA's
+# targetRef mechanism has nothing resolvable to target. Targeting it anyway would silently produce
+# an empty .status.recommendation forever. arc-runners' resource values (platform/arc-runners/
+# values.yaml) rely on manual/observational tuning instead -- see docs/resource-management-policy.md.
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: platform-arc-systems-gha-rs-controller
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    # `platform-` prefix (found and corrected during code review): ArgoCD's Helm release name
+    # defaults to the Application's metadata.name, which this repo's ApplicationSet template sets
+    # to "platform-" followed by the GitOps directory's basename -- not the bare directory
+    # basename alone. Verified live via `helm template platform-arc-systems .`; matches the
+    # existing convention already used in platform/arc-runners/values.yaml's
+    # controllerServiceAccount.name.
+    name: platform-arc-systems-gha-rs-controller
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: '*'
+        controlledResources: ["cpu", "memory"]
+        # RequestsOnly (not the API default RequestsAndLimits): keeps recommendations consistent
+        # with this repo's CPU-request-only / memory-request+limit policy -- without this, the
+        # recommender would also surface a CPU-limit suggestion that policy deliberately omits.
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 50m
+          memory: 64Mi

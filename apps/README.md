@@ -20,4 +20,6 @@ truly needs no RBAC-object or cluster-scoped creation rights.
 See [docs/gitops-repo-scaffold.md](../docs/gitops-repo-scaffold.md) for the exact expected layout
 and ready-to-copy content, and
 [docs/brainstorms/argocd-gitops-migration-requirements.md](../docs/brainstorms/argocd-gitops-migration-requirements.md)
-for the architectural decisions behind the two-tier `apps`/`platform` split.
+for the architectural decisions behind the two-tier `apps`/`platform` split. See
+[docs/resource-management-policy.md](../docs/resource-management-policy.md) for the CPU/memory/
+`emptyDir` sizing policy and autoscaling decision criteria every chart here should follow.

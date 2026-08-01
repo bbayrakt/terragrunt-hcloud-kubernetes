@@ -13,3 +13,98 @@ gha-runner-scale-set:
   controllerServiceAccount:
     name: platform-arc-systems-gha-rs-controller
     namespace: arc-systems
+  # Hand-authored dind pod spec (docs/resource-management-policy.md, docs/plans/2026-08-01-002-
+  # feat-helm-chart-resource-management-plan.md U3). NOT using `containerMode.type: dind`: that
+  # convenience field and per-volume `emptyDir.sizeLimit` customization are documented upstream
+  # (this chart's own values.yaml) as mutually exclusive. This blueprint is copied verbatim from
+  # the pinned chart version's own commented-out `containerMode.type=dind` reference spec (`helm
+  # show values oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+  # --version 0.13.1`), with explicit CPU requests (no CPU limit -- avoids throttling bursty CI
+  # job containers when the node has spare capacity), memory requests+limits, and `sizeLimit` on
+  # every `emptyDir` volume added on top. Re-diff this block against the chart's own blueprint on
+  # every future chart version bump (image tags, env vars, probes may change upstream).
+  template:
+    spec:
+      # `dind` lives under `initContainers:` (not `containers:`), matching the upstream chart's own
+      # blueprint exactly -- found and corrected during code review. It uses the native sidecar
+      # container pattern (GA in Kubernetes 1.29+): an init container with `restartPolicy: Always`
+      # starts before the main containers and keeps running for the pod's lifetime, unlike a
+      # regular init container which runs to completion once. `restartPolicy` on a non-init
+      # container is rejected outright by Kubernetes API validation, so this field only being valid
+      # here is not a stylistic choice.
+      initContainers:
+        - name: init-dind-externals
+          image: ghcr.io/actions/actions-runner:latest
+          command: ["cp", "-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: dind-externals
+              mountPath: /home/runner/tmpDir
+        - name: dind
+          image: docker:dind
+          args:
+            - dockerd
+            - --host=unix:///var/run/docker.sock
+            - --group=$(DOCKER_GROUP_GID)
+          env:
+            - name: DOCKER_GROUP_GID
+              value: "123"
+          securityContext:
+            privileged: true
+          restartPolicy: Always
+          startupProbe:
+            exec:
+              command:
+                - docker
+                - info
+            initialDelaySeconds: 0
+            failureThreshold: 24
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 1024Mi
+          volumeMounts:
+            - name: work
+              mountPath: /home/runner/_work
+            - name: dind-sock
+              mountPath: /var/run
+            - name: dind-externals
+              mountPath: /home/runner/externals
+      containers:
+        - name: runner
+          image: ghcr.io/actions/actions-runner:latest
+          command: ["/home/runner/run.sh"]
+          env:
+            - name: DOCKER_HOST
+              value: unix:///var/run/docker.sock
+            - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+              value: "120"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+          volumeMounts:
+            - name: work
+              mountPath: /home/runner/_work
+            - name: dind-sock
+              mountPath: /var/run
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 5Gi
+        - name: dind-sock
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: dind-externals
+          emptyDir:
+            sizeLimit: 1Gi

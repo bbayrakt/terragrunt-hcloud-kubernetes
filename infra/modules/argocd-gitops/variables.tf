@@ -72,7 +72,14 @@ variable "platform_destination_namespaces" {
   # `arc-runners` (amended 2026-08-02): gha-runner-scale-set moved here from the apps tier --
   # it needs namespace-scoped Role/RoleBinding creation rights (to grant the arc-systems
   # controller's ServiceAccount cross-namespace access), which only platform-tier apps may have.
-  default = ["arc-systems", "sealed-secrets", "arc-runners"]
+  # `vpa` (added docs/plans/2026-08-01-002-feat-helm-chart-resource-management-plan.md U4): the
+  # Vertical Pod Autoscaler Recommender installs its own CRD + ClusterRole/ClusterRoleBinding, so
+  # it belongs in `platform/`, not `apps/`. Added to this shared *default* rather than an
+  # environment-specific override so any future production `argocd-gitops` stack inherits it
+  # automatically, consistent with how the three namespaces above are already handled -- do not
+  # "helpfully" add an explicit override in a single environment's terragrunt.hcl inputs, or it
+  # will silently diverge from this default later.
+  default = ["arc-systems", "sealed-secrets", "arc-runners", "vpa"]
 }
 
 variable "platform_cluster_resource_whitelist" {
