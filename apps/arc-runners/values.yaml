@@ -1,0 +1,5 @@
+gha-runner-scale-set:
+  githubConfigUrl: "https://github.com/infrabytes/"
+  githubConfigSecret: github-arc-pat
+  runnerGroup: "Default"
+  minRunners: 1
