@@ -25,6 +25,13 @@ gha-runner-scale-set:
   # every future chart version bump (image tags, env vars, probes may change upstream).
   template:
     spec:
+      # `dind` lives under `initContainers:` (not `containers:`), matching the upstream chart's own
+      # blueprint exactly -- found and corrected during code review. It uses the native sidecar
+      # container pattern (GA in Kubernetes 1.29+): an init container with `restartPolicy: Always`
+      # starts before the main containers and keeps running for the pod's lifetime, unlike a
+      # regular init container which runs to completion once. `restartPolicy` on a non-init
+      # container is rejected outright by Kubernetes API validation, so this field only being valid
+      # here is not a stylistic choice.
       initContainers:
         - name: init-dind-externals
           image: ghcr.io/actions/actions-runner:latest
@@ -38,7 +45,6 @@ gha-runner-scale-set:
           volumeMounts:
             - name: dind-externals
               mountPath: /home/runner/tmpDir
-      containers:
         - name: dind
           image: docker:dind
           args:
@@ -72,6 +78,7 @@ gha-runner-scale-set:
               mountPath: /var/run
             - name: dind-externals
               mountPath: /home/runner/externals
+      containers:
         - name: runner
           image: ghcr.io/actions/actions-runner:latest
           command: ["/home/runner/run.sh"]
