@@ -3,3 +3,13 @@ gha-runner-scale-set:
   githubConfigSecret: github-arc-pat
   runnerGroup: "Default"
   minRunners: 1
+  # Explicit, not auto-discovered (found via live U7 testing): this chart's default Helm
+  # `lookup` for the controller's ServiceAccount only searches its own release namespace
+  # (arc-runners), so it never finds the controller living in arc-systems -- our two-tier
+  # apps/platform split puts them in different namespaces by design (R7/R8). The chart's own
+  # error message names this exact fix ("Consider setting controllerServiceAccount.name...").
+  # Name matches platform/arc-systems/'s thin-wrapper release name (Chart.yaml's `name` field
+  # combined with the ApplicationSet's release-name-from-directory-basename convention).
+  controllerServiceAccount:
+    name: platform-arc-systems-gha-rs-controller
+    namespace: arc-systems
