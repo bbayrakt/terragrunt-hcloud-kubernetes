@@ -77,5 +77,13 @@ variable "platform_cluster_resource_whitelist" {
     { group = "apiextensions.k8s.io", kind = "CustomResourceDefinition" },
     { group = "rbac.authorization.k8s.io", kind = "ClusterRole" },
     { group = "rbac.authorization.k8s.io", kind = "ClusterRoleBinding" },
+    # Found via live apply (U5): CreateNamespace=true's PreSync namespace-creation task is
+    # itself a cluster-scoped resource op subject to this whitelist -- omitting Namespace here
+    # made every platform-tier app's first sync fail with "resource :Namespace is not permitted
+    # in project platform", since ArgoCD denies any cluster-scoped kind absent from the
+    # whitelist by default. Safe to allow broadly: an Application's destination.namespace is
+    # already validated against platform_destination_namespaces at the AppProject level, so this
+    # can only ever create one of those pre-approved namespaces, never an arbitrary one.
+    { group = "", kind = "Namespace" },
   ]
 }

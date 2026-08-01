@@ -1,13 +1,20 @@
 ## AppProjects: apps (restricted) and platform (privileged)
 ##
 ## apps: cluster-scoped resources are default-deny in ArgoCD (empty cluster_resource_whitelist
-## already blocks them); cluster_resource_blacklist is added anyway for defense-in-depth /
-## self-documentation. namespace_resource_blacklist additionally blocks Role/RoleBinding, which
-## are namespaced (default-allow) and would otherwise let an apps-tier app bind its ServiceAccount
-## to a pre-existing ClusterRole and escalate within its own namespace.
-## managed_namespace_metadata applies Pod Security Standard enforcement to any namespace this
-## project creates via CreateNamespace=true, closing the gap that resource-kind whitelisting alone
-## can't cover (privileged/hostPath/hostNetwork Pod specs).
+## already blocks them). The sole exception is Namespace: CreateNamespace=true's PreSync
+## namespace-creation task is itself a cluster-scoped op, found blocked in live testing (U5/U7)
+## by the wildcard cluster_resource_blacklist this project used to carry -- a blacklist entry
+## re-excludes anything the whitelist explicitly allows, so a blanket `*/*` blacklist and a
+## narrow whitelist exception are mutually exclusive, not layered defense-in-depth. Whitelisting
+## only Namespace, with no blacklist at all, is safe: an Application's destination.namespace is
+## already validated against apps_destination_namespaces at the AppProject level, so this can
+## only ever create one of those pre-approved namespaces, never an arbitrary one. Everything else
+## cluster-scoped remains denied by the empty-whitelist default. namespace_resource_blacklist
+## additionally blocks Role/RoleBinding, which are namespaced (default-allow) and would otherwise
+## let an apps-tier app bind its ServiceAccount to a pre-existing ClusterRole and escalate within
+## its own namespace. managed_namespace_metadata applies Pod Security Standard enforcement to any
+## namespace this project creates via CreateNamespace=true, closing the gap that resource-kind
+## whitelisting alone can't cover (privileged/hostPath/hostNetwork Pod specs).
 resource "argocd_project" "apps" {
   metadata {
     name = "apps"
@@ -25,9 +32,9 @@ resource "argocd_project" "apps" {
       }
     }
 
-    cluster_resource_blacklist {
-      group = "*"
-      kind  = "*"
+    cluster_resource_whitelist {
+      group = ""
+      kind  = "Namespace"
     }
 
     namespace_resource_blacklist {
