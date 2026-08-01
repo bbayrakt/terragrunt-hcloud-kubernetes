@@ -1,5 +1,5 @@
 variable "gitops_repo_url" {
-  description = "SSH URL of the dedicated GitOps repository (e.g. git@github.com:org/gitops-repo.git)"
+  description = "URL of the GitOps content repository — either this repo's own SSH URL (self-referencing monorepo) or a separate, dedicated GitOps repository. Both topologies are equally supported; only the value differs."
   type        = string
 }
 
@@ -7,6 +7,18 @@ variable "gitops_repo_ssh_private_key" {
   description = "SSH deploy key (read-only) used by ArgoCD to pull the GitOps repository"
   type        = string
   sensitive   = true
+}
+
+variable "gitops_apps_path" {
+  description = "Path (relative to the GitOps repo root) whose subdirectories the `apps`-tier ApplicationSet's git directory generator watches"
+  type        = string
+  default     = "apps"
+}
+
+variable "gitops_platform_path" {
+  description = "Path (relative to the GitOps repo root) whose subdirectories the `platform`-tier ApplicationSet's git directory generator watches"
+  type        = string
+  default     = "platform"
 }
 
 variable "apps_destination_namespaces" {

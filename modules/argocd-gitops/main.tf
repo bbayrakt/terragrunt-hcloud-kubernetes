@@ -102,7 +102,7 @@ resource "argocd_application_set" "apps" {
         revision = "HEAD"
 
         directory {
-          path = "apps/*"
+          path = "${var.gitops_apps_path}/*"
         }
       }
     }
@@ -173,7 +173,7 @@ resource "argocd_application_set" "platform" {
         revision = "HEAD"
 
         directory {
-          path = "platform/*"
+          path = "${var.gitops_platform_path}/*"
         }
       }
     }
