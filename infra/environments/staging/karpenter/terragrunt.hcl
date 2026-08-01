@@ -53,7 +53,7 @@ dependency "kubernetes_cluster" {
     talos_machine_secrets           = {}
     control_plane_private_ipv4_list = ["127.0.0.1"]
   }
-  mock_outputs_allowed_terraform_commands = ["init", "validate"]
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan", "apply", "destroy"]
 }
 
 generate "providers" {

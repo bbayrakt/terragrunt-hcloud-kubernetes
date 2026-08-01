@@ -55,7 +55,7 @@ dependency "kubernetes_cluster" {
   mock_outputs = {
     kubeconfig_path = local.fallback_kubeconfig_path
   }
-  mock_outputs_allowed_terraform_commands = ["init", "validate"]
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan", "apply", "destroy"]
 }
 
 dependencies {
