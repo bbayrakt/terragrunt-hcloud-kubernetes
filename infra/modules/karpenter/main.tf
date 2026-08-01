@@ -100,9 +100,9 @@ resource "kubernetes_manifest" "karpenter_crds" {
     "spec.names.categories",
   ]
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # No prevent_destroy (removed 2026-08-02, explicit user decision): matches modules/crds -- this
+  # repo intentionally supports `terragrunt run --all destroy` as a single-command full teardown.
+  # See modules/crds/main.tf's chart_crds resource for the full rationale and residual tradeoff.
 }
 
 data "talos_machine_configuration" "worker" {

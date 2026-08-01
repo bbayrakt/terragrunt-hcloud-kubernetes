@@ -43,7 +43,10 @@ resource "kubernetes_manifest" "chart_crds" {
     "spec.names.categories",
   ]
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # No prevent_destroy (removed 2026-08-02, explicit user decision): this repo intentionally
+  # supports `terragrunt run --all destroy` as a single-command full teardown, which prevent_destroy
+  # blocks outright (Terraform refuses even an explicit destroy of a protected resource). The
+  # tradeoff this reopens: a normal `apply` that removes a chart's map entry (or otherwise causes
+  # Terraform to plan this CRD's destruction) will now destroy it silently instead of erroring
+  # loudly -- review `terragrunt plan` output for unexpected CRD destroys before applying.
 }

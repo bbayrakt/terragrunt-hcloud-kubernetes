@@ -24,12 +24,15 @@ resource "kubernetes_namespace_v1" "pre_created" {
   }
 
   lifecycle {
-    ignore_changes  = [metadata]
-    prevent_destroy = true # Found by ce-code-review: without this, removing a helm_secrets
-    # entry that shares a namespace with an active release (as happened for github-arc-pat/
-    # arc-runners during this repo's ArgoCD migration) plans a silent destroy of the whole
-    # namespace unless manually disowned from state first. This mirrors the same protection
-    # modules/crds already gives CRDs.
+    ignore_changes = [metadata]
+    # No prevent_destroy (removed 2026-08-02, explicit user decision, reverting the ce-code-review
+    # finding this comment used to document): this repo intentionally supports
+    # `terragrunt run --all destroy` as a single-command full teardown, which prevent_destroy
+    # blocks outright. The tradeoff this reopens: removing a helm_secrets entry that shares a
+    # namespace with an active release now plans a silent destroy of the whole namespace instead
+    # of erroring loudly (as happened for github-arc-pat/arc-runners during this repo's ArgoCD
+    # migration) -- review `terragrunt plan` output for unexpected namespace destroys before
+    # applying, especially when editing env.hcl's helm_secrets map.
   }
 }
 
