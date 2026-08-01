@@ -1,6 +1,7 @@
 ---
 title: ArgoCD Two-Tier apps/platform Trust Boundary — the RBAC Rule and Live Onboarding Gotchas
 date: 2026-08-02
+last_updated: 2026-08-01
 category: architecture-patterns
 module: argocd-gitops
 problem_type: architecture_pattern
@@ -12,7 +13,8 @@ applies_when:
   - "A chart's CRDs are large (multiple custom types with extensive OpenAPI schemas)"
   - "A chart auto-discovers a sibling component (e.g. a controller's ServiceAccount) via a Helm lookup() based on labels"
   - "Deciding whether a new app belongs in the apps tier or the platform tier"
-tags: [argocd, appproject, rbac, trust-boundary, gitops, helm, crd, actions-runner-controller]
+  - "Authoring a static manifest (VerticalPodAutoscaler, PodDisruptionBudget, NetworkPolicy, or similar) that references another ArgoCD/Helm-rendered resource's name via targetRef/selector/similar"
+tags: [argocd, appproject, rbac, trust-boundary, gitops, helm, crd, actions-runner-controller, vpa, release-naming]
 related_components: [argocd-gitops-stack]
 ---
 
@@ -159,7 +161,47 @@ gha-runner-scale-set:
     namespace: arc-systems
 ```
 
+### Gotcha 4 — static manifests referencing a Helm-rendered resource's name must use the ApplicationSet's release-name prefix, not the bare directory basename
+
+Any static, non-chart-templated manifest placed in a wrapper chart's `templates/` directory (this
+repo's established pattern for content like `platform/arc-runners/templates/sealed-secret.yaml`)
+that needs to reference another Helm-rendered resource's name — for example a
+`VerticalPodAutoscaler`'s `spec.targetRef.name` pointing at that same release's Deployment — must
+not assume the Deployment name equals the bare GitOps directory basename. ArgoCD's Helm release
+name defaults to the `Application`'s `metadata.name`, and this repo's `ApplicationSet` template
+sets that to a *prefixed* name, not the bare basename:
+
+```hcl
+# infra/modules/argocd-gitops/main.tf -- both tier ApplicationSets use this pattern
+template {
+  metadata {
+    name = "platform-{{path.basename}}"   # "apps-{{path.basename}}" for the apps tier
+  }
+  ...
+}
+```
+
+For `platform/arc-systems/`, this makes the actual Helm release name `platform-arc-systems`, so
+the `gha-runner-scale-set-controller` chart's own naming template renders its Deployment as
+`platform-arc-systems-gha-rs-controller` — **not** `arc-systems-gha-rs-controller`. A static
+manifest hardcoding the bare-basename form applies cleanly (VPA objects don't validate `targetRef`
+existence at admission time) but silently never resolves: `.status.recommendation` stays empty
+forever with no error surfaced anywhere. This is the same naming family as Gotcha 3 above (an
+ArgoCD/Helm naming assumption that looks obvious but isn't), though the mechanism differs — Gotcha
+3 is a same-namespace `lookup()` scope failure; this is a hardcoded literal name in a static
+manifest not accounting for the ApplicationSet's own prefixing convention.
+
+Fix: before hardcoding any cross-reference to a Helm-rendered resource's name in a static
+manifest, verify the actual rendered name — e.g. `helm template <prefixed-release-name> <chart>
+--version <pinned-version> | grep -A2 '^kind: Deployment'` — rather than assuming it matches the
+GitOps directory basename. Charts that set an explicit `fullnameOverride` (like this repo's
+`platform/sealed-secrets/`) are an exception: `fullnameOverride` ignores the release name
+entirely, so the bare, unprefixed name is correct there — check per chart, don't assume one rule
+fits every chart uniformly.
+
 ## Why This Matters
+
+
 
 None of these three gotchas are caught by `terraform hcl validate`/`terragrunt validate` — they
 only surface once ArgoCD actually renders (`helm template`) and syncs the chart against a live
@@ -189,6 +231,11 @@ legitimate-looking case" is exactly how tiered trust models erode over time — 
 - Whenever `CreateNamespace=true` is used in an `ApplicationSet`/`Application` sync policy: confirm
   `Namespace` is whitelisted for that tier, and confirm no blanket cluster-resource blacklist
   exists that would re-exclude it.
+- Before authoring any static manifest that references another Helm-rendered resource's name
+  (a `VerticalPodAutoscaler`'s `targetRef`, a `PodDisruptionBudget`'s `selector`, or similar):
+  verify the actual rendered name via `helm template`, accounting for the ApplicationSet's
+  `platform-`/`apps-` release-name prefix, rather than assuming it equals the bare directory
+  basename.
 
 ## Examples
 
@@ -209,3 +256,4 @@ GitHub-side scale-set deregistration on delete) are in the commit history around
 - `docs/gitops-repo-scaffold.md` — canonical `platform/arc-systems/`, `platform/arc-runners/`,
   `platform/sealed-secrets/` file contents
 - `docs/solutions/integration-issues/argocd-provider-config-path-tls-cert-verification-failure-2026-07-31.md` — another ArgoCD-provider gotcha from the same migration effort (unrelated root cause, same module)
+- `docs/solutions/integration-issues/dind-sidecar-restartpolicy-non-init-container-pod-validation-failure-2026-08-01.md` — a Pod-spec-level bug found in the same PR that added Gotcha 4 above (different mechanism: Kubernetes native sidecar container placement, not ArgoCD/Helm naming)
