@@ -319,7 +319,7 @@ official config-file reference during the originating brainstorm and is treated 
 
 ## Implementation Units
 
-- [ ] U1. **Make the ArgoCD GitOps module topology-agnostic**
+- [x] U1. **Make the ArgoCD GitOps module topology-agnostic**
 
 **Goal:** Replace hardcoded `apps/*`/`platform/*` ApplicationSet generator paths with configurable
 variables, and reword the module's documentation so self-referencing monorepo and dedicated
@@ -387,7 +387,7 @@ split-repo read as equally supported, not "dedicated repo required."
 
 ---
 
-- [ ] U2. **Relocate all Terraform/Terragrunt content into `infra/`**
+- [x] U2. **Relocate all Terraform/Terragrunt content into `infra/`**
 
 **Goal:** Move `environments/`, `modules/`, `root.hcl`, `Makefile`, `setup.sh`, `examples/`,
 `secrets.yaml`, `secrets.yaml.example`, and `keys.txt` into a new top-level `infra/` directory,
@@ -487,7 +487,7 @@ and `secrets.yaml.example` at their **pre-move** paths; this unit relocates thos
 
 ---
 
-- [ ] U3. **Repair path references broken or made stale by the move**
+- [x] U3. **Repair path references broken or made stale by the move**
 
 **Goal:** Update every documented command, script, and doc-prose reference that assumed
 Terraform/Terragrunt content lived at the true repo root, so the repo's onboarding and operational
@@ -563,7 +563,7 @@ instructions are correct post-move.
 
 ---
 
-- [ ] U4. **Wire the new path variables through the staging stack and add the `apps/`/`platform/` skeleton**
+- [x] U4. **Wire the new path variables through the staging stack and add the `apps/`/`platform/` skeleton**
 
 **Goal:** Thread `gitops_apps_path`/`gitops_platform_path` from `env.hcl` through the
 `argocd-gitops` Terragrunt stack into the module (U1's variables), and create the top-level
