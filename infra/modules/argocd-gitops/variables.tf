@@ -48,20 +48,18 @@ variable "gitops_platform_path" {
 variable "apps_destination_namespaces" {
   description = "Namespace allow-list for the `apps` AppProject's destinations"
   type        = list(string)
-  default     = ["arc-runners"]
+  # No apps-tier content exists yet (amended 2026-08-02): gha-runner-scale-set was found during
+  # live U7 testing to need namespace-scoped Role/RoleBinding creation rights, which apps-tier
+  # apps must never have (see the apps AppProject's blacklist comment in main.tf) -- it moved to
+  # platform/arc-runners/ instead. Populate this when a real ordinary (non-RBAC-creating) app is
+  # added.
+  default = []
 }
 
 variable "apps_pod_security_level" {
   description = "Pod Security Standard level applied to `apps`-tier namespaces via managed_namespace_metadata (restricted or baseline)"
   type        = string
-  # Downgraded from "restricted" during live U7 testing, per the plan's own anticipated
-  # contingency (docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md U7 Test
-  # scenarios): gha-runner-scale-set's runner Pod
-  # (ghcr.io/actions/actions-runner:latest) needs allowPrivilegeEscalation, Linux capabilities,
-  # and non-restricted seccomp/runAsNonRoot -- "restricted" rejected it outright at admission.
-  # Only one apps-tier namespace exists today (arc-runners), so this affects exactly that
-  # namespace; revisit per-namespace if a future apps-tier app needs "restricted" again.
-  default = "baseline"
+  default     = "restricted"
 }
 
 variable "platform_destination_namespaces" {
@@ -71,7 +69,10 @@ variable "platform_destination_namespaces" {
   # template derives destination.namespace from the GitOps repo's directory basename
   # ({{path.basename}}), each app's directory name IS its target namespace. A dedicated
   # namespace also avoids depositing the Sealed Secrets controller into kube-system.
-  default = ["arc-systems", "sealed-secrets"]
+  # `arc-runners` (amended 2026-08-02): gha-runner-scale-set moved here from the apps tier --
+  # it needs namespace-scoped Role/RoleBinding creation rights (to grant the arc-systems
+  # controller's ServiceAccount cross-namespace access), which only platform-tier apps may have.
+  default = ["arc-systems", "sealed-secrets", "arc-runners"]
 }
 
 variable "platform_cluster_resource_whitelist" {

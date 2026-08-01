@@ -9,20 +9,14 @@
 ## only Namespace, with no blacklist at all, is safe: an Application's destination.namespace is
 ## already validated against apps_destination_namespaces at the AppProject level, so this can
 ## only ever create one of those pre-approved namespaces, never an arbitrary one. Everything else
-## cluster-scoped remains denied by the empty-whitelist default.
-##
-## namespace_resource_blacklist no longer blocks Role/RoleBinding (removed during live U7
-## testing): gha-runner-scale-set's chart needs to create its own self-contained, namespace-
-## scoped Role + RoleBinding granting the platform-tier controller's ServiceAccount (a different
-## namespace) permission to manage runner Pods here -- standard ARC cross-namespace pattern, not
-## a pre-existing-ClusterRole reference. ArgoCD's namespace_resource_blacklist is kind-level only
-## (no roleRef-aware check exists), so blocking the kind to prevent "bind a pre-existing dangerous
-## ClusterRole" also blocks this legitimate self-contained case -- there's no narrower ArgoCD-
-## native middle ground. ACCEPTED RISK, solo-operator scope only (same treatment as the shared-
-## KSOPS-decrypt-key risk documented in docs/brainstorms/argocd-gitops-migration-requirements.md):
-## any future apps-tier manifest could in principle bind a pre-existing powerful ClusterRole
-## (e.g. cluster-admin) via RoleBinding to escalate. Revisit with a roleRef-aware admission policy
-## (Kyverno/OPA) if/when a collaborator with apps/-only push access is introduced.
+## cluster-scoped remains denied by the empty-whitelist default. namespace_resource_blacklist
+## additionally blocks Role/RoleBinding, which are namespaced (default-allow) and would otherwise
+## let an apps-tier app bind its ServiceAccount to a pre-existing ClusterRole and escalate within
+## its own namespace. THIS IS THE CORE TRUST BOUNDARY of the two-tier design, not a defense-in-
+## depth nicety: apps/ is the tier ordinary cluster users (not cluster admins) will eventually push
+## to, and RBAC-escalation rights are never an acceptable risk for that tier, even temporarily --
+## do not remove this to unblock an app that turns out to need RBAC creation rights; move that app
+## to platform/ instead (see gha-runner-scale-set's move to platform/arc-runners/, U7 amendment).
 ## managed_namespace_metadata applies Pod Security Standard enforcement to any
 ## namespace this project creates via CreateNamespace=true, closing the gap that resource-kind
 ## whitelisting alone can't cover (privileged/hostPath/hostNetwork Pod specs).
@@ -46,6 +40,16 @@ resource "argocd_project" "apps" {
     cluster_resource_whitelist {
       group = ""
       kind  = "Namespace"
+    }
+
+    namespace_resource_blacklist {
+      group = "rbac.authorization.k8s.io"
+      kind  = "Role"
+    }
+
+    namespace_resource_blacklist {
+      group = "rbac.authorization.k8s.io"
+      kind  = "RoleBinding"
     }
   }
 }
