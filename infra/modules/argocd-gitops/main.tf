@@ -223,9 +223,34 @@ resource "argocd_application_set" "platform" {
 ## gitops_repo_password, e.g. a personal access token), or no credentials at all for a public
 ## HTTPS repository (all three left null/default). Credential sourced from secrets.yaml the same
 ## way every other secret in this repo already is.
+##
+## local.using_ssh_auth is the single source of truth for which mode is active -- treats an
+## empty string the same as null so a blanked-out (not unset) ssh key doesn't accidentally select
+## SSH mode with an empty credential. The two preconditions below (found via code review: multiple
+## independent reviewers converged on the same gap) reject ambiguous configurations at plan time
+## instead of silently discarding one credential set or applying a malformed partial one.
+locals {
+  using_ssh_auth = var.gitops_repo_ssh_private_key != null && var.gitops_repo_ssh_private_key != ""
+}
+
 resource "argocd_repository" "gitops" {
   repo            = var.gitops_repo_url
-  username        = var.gitops_repo_ssh_private_key != null ? "git" : var.gitops_repo_username
-  password        = var.gitops_repo_ssh_private_key != null ? null : var.gitops_repo_password
-  ssh_private_key = var.gitops_repo_ssh_private_key
+  username        = local.using_ssh_auth ? "git" : var.gitops_repo_username
+  password        = local.using_ssh_auth ? null : var.gitops_repo_password
+  ssh_private_key = local.using_ssh_auth ? var.gitops_repo_ssh_private_key : null
+
+  lifecycle {
+    precondition {
+      condition     = !(local.using_ssh_auth && (var.gitops_repo_username != null || var.gitops_repo_password != null))
+      error_message = "Set either gitops_repo_ssh_private_key (SSH auth) or gitops_repo_username/gitops_repo_password (HTTPS auth), not both -- SSH would silently take precedence and the HTTPS credentials would be discarded."
+    }
+    precondition {
+      condition     = (var.gitops_repo_username == null) == (var.gitops_repo_password == null)
+      error_message = "gitops_repo_username and gitops_repo_password must both be set or both be null -- a lone username or password produces an incomplete HTTPS credential."
+    }
+    precondition {
+      condition     = var.gitops_apps_path != var.gitops_platform_path
+      error_message = "gitops_apps_path and gitops_platform_path must not be equal -- an overlapping path would let the same content land in both the restricted apps AppProject and the privileged platform AppProject, defeating the two-tier trust boundary."
+    }
+  }
 }

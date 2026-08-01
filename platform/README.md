@@ -2,7 +2,7 @@
 
 Privileged tier: apps that genuinely need cluster-scoped install rights (e.g. controllers that
 install their own CRDs), synced by ArgoCD's `platform` `ApplicationSet` (git directory generator
-watching `platform/*`, see `modules/argocd-gitops/main.tf`). Each subdirectory here becomes an
+watching `platform/*`, see `infra/modules/argocd-gitops/main.tf`). Each subdirectory here becomes an
 ArgoCD `Application` in the `platform` `AppProject`, whitelisted for only the specific
 cluster-scoped kinds named in `var.platform_cluster_resource_whitelist`.
 

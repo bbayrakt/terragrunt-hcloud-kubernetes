@@ -67,8 +67,12 @@ if [ -f "keys.txt" ]; then
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Skipping key generation."
     else
-        mv keys.txt keys.txt.backup
-        echo "Existing keys backed up to keys.txt.backup"
+        # Back up the rotated-out private key outside the working tree, not as an in-repo
+        # keys.txt.backup file -- that name isn't covered by .gitignore's bare `keys.txt`
+        # pattern and would risk landing in a commit alongside the real secrets.
+        BACKUP_DIR="$(mktemp -d)"
+        mv keys.txt "$BACKUP_DIR/keys.txt.backup"
+        echo "Existing key backed up to $BACKUP_DIR/keys.txt.backup (outside the repo -- move it somewhere durable before this temp dir is cleaned up)"
         age-keygen -o keys.txt
         echo -e "${GREEN}✓${NC} New age keys generated"
     fi
@@ -87,7 +91,9 @@ fi
 # this script lives under infra/, but .sops.yaml stays at the true repository root so it can
 # also govern top-level platform/**/*.sops.yaml once that content exists)
 if [ -f "keys.txt" ] && command_exists age-keygen; then
-    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+    if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+        REPO_ROOT=""
+    fi
     SOPS_YAML_PATH="${REPO_ROOT:-..}/.sops.yaml"
 
     if [ ! -f "$SOPS_YAML_PATH" ]; then
@@ -101,8 +107,9 @@ if [ -f "keys.txt" ] && command_exists age-keygen; then
         echo ""
         echo "Public key: $PUBLIC_KEY"
 
-        # Update .sops.yaml with the actual public key
+        # Update .sops.yaml with the actual public key (no --in-place backup file left behind)
         sed -i.bak "s/age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/$PUBLIC_KEY/" "$SOPS_YAML_PATH"
+        rm -f "${SOPS_YAML_PATH}.bak"
         echo -e "${GREEN}✓${NC} .sops.yaml updated with your public key"
     fi
 fi
@@ -124,6 +131,7 @@ else
     
     if [ -n "$HCLOUD_TOKEN" ]; then
         sed -i.bak "s/YOUR_HCLOUD_TOKEN_HERE/$HCLOUD_TOKEN/" secrets.yaml
+        rm -f secrets.yaml.bak
         echo -e "${GREEN}✓${NC} Hetzner Cloud token added"
     fi
     

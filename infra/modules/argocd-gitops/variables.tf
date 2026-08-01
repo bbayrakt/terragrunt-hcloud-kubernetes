@@ -27,12 +27,22 @@ variable "gitops_apps_path" {
   description = "Path (relative to the GitOps repo root) whose subdirectories the `apps`-tier ApplicationSet's git directory generator watches"
   type        = string
   default     = "apps"
+
+  validation {
+    condition     = var.gitops_apps_path != "" && var.gitops_apps_path != "." && !startswith(var.gitops_apps_path, "/") && !endswith(var.gitops_apps_path, "/")
+    error_message = "gitops_apps_path must be a non-empty relative path segment (not \"\", not \".\", no leading or trailing slash) -- a degenerate value here would widen the apps-tier ApplicationSet's directory-generator match beyond the intended subtree."
+  }
 }
 
 variable "gitops_platform_path" {
   description = "Path (relative to the GitOps repo root) whose subdirectories the `platform`-tier ApplicationSet's git directory generator watches"
   type        = string
   default     = "platform"
+
+  validation {
+    condition     = var.gitops_platform_path != "" && var.gitops_platform_path != "." && !startswith(var.gitops_platform_path, "/") && !endswith(var.gitops_platform_path, "/")
+    error_message = "gitops_platform_path must be a non-empty relative path segment (not \"\", not \".\", no leading or trailing slash) -- a degenerate value here would widen the platform-tier ApplicationSet's directory-generator match beyond the intended subtree."
+  }
 }
 
 variable "apps_destination_namespaces" {

@@ -74,7 +74,7 @@ both be null for a public HTTPS repository.
 
 The `argocd` provider authenticates via `port_forward_with_namespace` against the existing
 cluster kubeconfig (not an exposed hostname), using ArgoCD's auto-generated
-`argocd-initial-admin-secret`. See `environments/staging/argocd-gitops/terragrunt.hcl` for the
+`argocd-initial-admin-secret`. See `infra/environments/staging/argocd-gitops/terragrunt.hcl` for the
 `before_hook` that fetches this password into a git-ignored local file before each
 plan/apply/refresh/import.
 
