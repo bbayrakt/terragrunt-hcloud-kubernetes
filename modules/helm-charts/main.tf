@@ -24,7 +24,12 @@ resource "kubernetes_namespace_v1" "pre_created" {
   }
 
   lifecycle {
-    ignore_changes = [metadata]
+    ignore_changes  = [metadata]
+    prevent_destroy = true # Found by ce-code-review: without this, removing a helm_secrets
+    # entry that shares a namespace with an active release (as happened for github-arc-pat/
+    # arc-runners during this repo's ArgoCD migration) plans a silent destroy of the whole
+    # namespace unless manually disowned from state first. This mirrors the same protection
+    # modules/crds already gives CRDs.
   }
 }
 

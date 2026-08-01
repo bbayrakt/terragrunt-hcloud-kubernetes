@@ -16,6 +16,10 @@ inputs = {
   cluster_name = local.cluster_name
   hcloud_token = local.secrets.hcloud_token
 
+  # ArgoCD GitOps repository (registered via the argocd-gitops stack's argocd_repository resource)
+  gitops_repo_url             = local.secrets.gitops_repo_url
+  gitops_repo_ssh_private_key = local.secrets.gitops_repo_ssh_private_key
+
   cert_manager_enabled = true
 
   cilium_encryption_enabled = true
@@ -48,7 +52,7 @@ inputs = {
   karpenter_nodeclass_labels = {}
   #   karpenter_nodeclass_spec_overrides = { firewallIDs = ["123456"] }
   karpenter_nodeclass_spec_overrides = {}
-  karpenter_nodepool_name = "staging-cpx"
+  karpenter_nodepool_name            = "staging-cpx"
   karpenter_server_types = [
     "cx23",
     "cx33",
@@ -172,12 +176,17 @@ inputs = {
       }
     }
 
-    github-arc-pat = {
-      name             = "github-arc-pat"
-      namespace        = "arc-runners"
+    # Platform-tier AGE private key for KSOPS, mounted into argocd-repo-server (see the argocd
+    # chart's `repoServer` values below). create_namespace = true: on a fresh cluster this secret
+    # is created before the argocd Helm release itself creates the `argocd` namespace, so it must
+    # ensure the namespace exists rather than assume it (found via live deploy validation --
+    # assuming the chart "already creates it" was wrong for a first-time apply).
+    platform-sops-age-key = {
+      name             = "platform-sops-age-key"
+      namespace        = "argocd"
       create_namespace = true
       data = {
-        github_token = local.secrets.github_token
+        "keys.txt" = local.secrets.platform_sops_age_private_key
       }
     }
   }
@@ -222,33 +231,6 @@ inputs = {
       }
     }
 
-    gha-runner-scale-set-controller = {
-      repository   = "oci://ghcr.io/actions/actions-runner-controller-charts"
-      chart        = "gha-runner-scale-set-controller"
-      version      = "0.13.1"
-      namespace    = "arc-systems"
-      release_name = "gha-runner-scale-set-controller"
-      manage_crds  = true
-      install      = true
-    }
-
-    gha-runner-scale-set = {
-      repository   = "oci://ghcr.io/actions/actions-runner-controller-charts"
-      chart        = "gha-runner-scale-set"
-      version      = "0.13.1"
-      namespace    = "arc-runners"
-      release_name = "gha-runner-scale-set"
-      manage_crds  = false
-      install      = true
-      priority     = 2
-      values = {
-        githubConfigUrl    = local.secrets.github_config_url
-        githubConfigSecret = "github-arc-pat"
-        runnerGroup        = try(local.secrets.github_runner_group, "Default")
-        minRunners         = 1
-      }
-    }
-
     argocd = {
       repository   = "https://argoproj.github.io/argo-helm"
       chart        = "argo-cd"
@@ -266,6 +248,14 @@ inputs = {
           params = {
             "server.insecure" = true
           }
+          # KSOPS build option for platform-tier SOPS-encrypted secrets. --enable-alpha-plugins
+          # and --enable-exec are both required (--enable-exec alone is easy to miss). NOT using
+          # --enable-helm here -- platform-tier apps use ArgoCD's native multi-source Helm support,
+          # not Kustomize helmCharts: inflation (see docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md,
+          # Key Technical Decisions #10).
+          cm = {
+            "kustomize.buildOptions" = "--enable-alpha-plugins --enable-exec"
+          }
         }
         server = {
           service = {
@@ -282,6 +272,58 @@ inputs = {
               }
             ]
           }
+        }
+        # KSOPS init container + volumes on the repo-server, patched additively onto the existing
+        # argocd release (no new Helm chart). Mounts the platform-sops-age-key Secret created above.
+        repoServer = {
+          volumes = [
+            {
+              name     = "custom-tools"
+              emptyDir = {}
+            },
+            {
+              name = "sops-age"
+              secret = {
+                secretName = "platform-sops-age-key"
+              }
+            }
+          ]
+          initContainers = [
+            {
+              name    = "install-ksops"
+              image   = "viaductoss/ksops:v4.5.1"
+              command = ["/usr/local/bin/ksops", "install", "--with-kustomize", "/custom-tools"]
+              volumeMounts = [
+                {
+                  name      = "custom-tools"
+                  mountPath = "/custom-tools"
+                }
+              ]
+            }
+          ]
+          volumeMounts = [
+            {
+              name      = "custom-tools"
+              mountPath = "/usr/local/bin/kustomize"
+              subPath   = "kustomize"
+            },
+            {
+              name      = "custom-tools"
+              mountPath = "/usr/local/bin/ksops"
+              subPath   = "ksops"
+            },
+            {
+              name      = "sops-age"
+              mountPath = "/sops/age"
+              readOnly  = true
+            }
+          ]
+          env = [
+            {
+              name  = "SOPS_AGE_KEY_FILE"
+              value = "/sops/age/keys.txt"
+            }
+          ]
         }
       }
     }
