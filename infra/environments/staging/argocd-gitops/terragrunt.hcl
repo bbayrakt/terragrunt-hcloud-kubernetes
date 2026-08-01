@@ -143,4 +143,6 @@ EOF
 inputs = {
   gitops_repo_url             = include.env.inputs.gitops_repo_url
   gitops_repo_ssh_private_key = include.env.inputs.gitops_repo_ssh_private_key
+  gitops_apps_path            = include.env.inputs.gitops_apps_path
+  gitops_platform_path        = include.env.inputs.gitops_platform_path
 }
