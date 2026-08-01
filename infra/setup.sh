@@ -52,7 +52,7 @@ fi
 if [ $MISSING_DEPS -eq 1 ]; then
     echo ""
     echo -e "${RED}Missing required dependencies. Please install them and try again.${NC}"
-    echo "See TERRAGRUNT_README.md for installation instructions."
+    echo "See README.md for installation instructions."
     exit 1
 fi
 
@@ -83,16 +83,26 @@ else
     fi
 fi
 
-# Extract public key and update .sops.yaml
+# Extract public key and update .sops.yaml (true repo root, not this script's own directory --
+# this script lives under infra/, but .sops.yaml stays at the true repository root so it can
+# also govern top-level platform/**/*.sops.yaml once that content exists)
 if [ -f "keys.txt" ] && command_exists age-keygen; then
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+    SOPS_YAML_PATH="${REPO_ROOT:-..}/.sops.yaml"
+
+    if [ ! -f "$SOPS_YAML_PATH" ]; then
+        echo -e "${RED}✗${NC} .sops.yaml not found at $SOPS_YAML_PATH -- refusing to silently skip the update."
+        exit 1
+    fi
+
     PUBLIC_KEY=$(grep "public key:" keys.txt | awk '{print $4}')
-    
+
     if [ -n "$PUBLIC_KEY" ]; then
         echo ""
         echo "Public key: $PUBLIC_KEY"
-        
+
         # Update .sops.yaml with the actual public key
-        sed -i.bak "s/age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/$PUBLIC_KEY/" .sops.yaml
+        sed -i.bak "s/age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/$PUBLIC_KEY/" "$SOPS_YAML_PATH"
         echo -e "${GREEN}✓${NC} .sops.yaml updated with your public key"
     fi
 fi
@@ -161,9 +171,9 @@ echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Review and update encrypted secrets: sops secrets.yaml"
-echo "2. Navigate to environment: cd environments/production/kubernetes"
+echo "2. Navigate to environment: cd environments/production/kubernetes-cluster"
 echo "3. Initialize Terragrunt: terragrunt init"
 echo "4. Plan deployment: terragrunt plan"
 echo "5. Apply changes: terragrunt apply"
 echo ""
-echo "📚 For more information, see TERRAGRUNT_README.md"
+echo "📚 For more information, see README.md"

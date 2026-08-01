@@ -6,83 +6,98 @@ The idea is to be able to provide one Terragrunt project which can deploy the cl
 
 ## Repository layout
 
+This repo hosts both the Terraform/Terragrunt infrastructure (under `infra/`) and, at the true
+repo root, the `apps/`/`platform/` content ArgoCD syncs as the GitOps source for everything
+beyond the bootstrap charts (see `docs/gitops-repo-scaffold.md`).
+
 ```text
 .
 ├── .gitignore
 ├── .sops.yaml
 ├── AGENTS.md
-├── Makefile
 ├── README.md
-├── keys.txt
-├── root.hcl
-├── secrets.yaml
-├── secrets.yaml.example
-├── setup.sh
-├── environments/
-│   ├── production/
-│   │   ├── env.hcl
-│   │   ├── crds/
-│   │   │   └── terragrunt.hcl
-│   │   ├── gateway-api/
-│   │   │   └── terragrunt.hcl
-│   │   ├── helm-charts/
-│   │   │   └── terragrunt.hcl
-│   │   └── kubernetes-cluster/
-│   │       └── terragrunt.hcl
-│   └── staging/
-│       ├── env.hcl
-│       ├── kubeconfig-staging
-│       ├── kubeconfig-staging.bak
-│       ├── talosconfig-staging
-│       ├── talosconfig-staging.bak
-│       ├── argocd-gitops/
-│       │   └── terragrunt.hcl
-│       ├── crds/
-│       │   └── terragrunt.hcl
-│       ├── gateway-api/
-│       │   └── terragrunt.hcl
-│       ├── helm-charts/
-│       │   └── terragrunt.hcl
-│       └── kubernetes-cluster/
-│           ├── talosconfig-staging
-│           └── terragrunt.hcl
-├── examples/
-│   ├── README.md
-│   ├── gateway-api-example.yaml
-│   ├── minio-backend/
-│   │   ├── .env.example
-│   │   ├── README.md
-│   │   ├── backend.tf
-│   │   └── docker-compose.yaml.example
-│   └── seaweedfs-backend/
-│       ├── README.md
-│       ├── backend.tf
-│       ├── docker-compose.yaml.example
-│       └── s3.json.example
-└── modules/
-    ├── argocd-gitops/
+├── apps/
+│   └── README.md
+├── platform/
+│   └── README.md
+├── docs/
+│   ├── brainstorms/
+│   ├── plans/
+│   ├── solutions/
+│   └── gitops-repo-scaffold.md
+└── infra/
+    ├── Makefile
+    ├── keys.txt
+    ├── root.hcl
+    ├── secrets.yaml
+    ├── secrets.yaml.example
+    ├── setup.sh
+    ├── environments/
+    │   ├── production/
+    │   │   ├── env.hcl
+    │   │   ├── crds/
+    │   │   │   └── terragrunt.hcl
+    │   │   ├── gateway-api/
+    │   │   │   └── terragrunt.hcl
+    │   │   ├── helm-charts/
+    │   │   │   └── terragrunt.hcl
+    │   │   └── kubernetes-cluster/
+    │   │       └── terragrunt.hcl
+    │   └── staging/
+    │       ├── env.hcl
+    │       ├── kubeconfig-staging
+    │       ├── kubeconfig-staging.bak
+    │       ├── talosconfig-staging
+    │       ├── talosconfig-staging.bak
+    │       ├── argocd-gitops/
+    │       │   └── terragrunt.hcl
+    │       ├── crds/
+    │       │   └── terragrunt.hcl
+    │       ├── gateway-api/
+    │       │   └── terragrunt.hcl
+    │       ├── helm-charts/
+    │       │   └── terragrunt.hcl
+    │       ├── karpenter/
+    │       │   └── terragrunt.hcl
+    │       └── kubernetes-cluster/
+    │           ├── talosconfig-staging
+    │           └── terragrunt.hcl
+    ├── examples/
     │   ├── README.md
-    │   ├── main.tf
-    │   ├── outputs.tf
-    │   └── variables.tf
-    ├── crds/
-    │   ├── main.tf
-    │   └── variables.tf
-    ├── gateway-api/
-    │   ├── README.md
-    │   ├── main.tf
-    │   ├── outputs.tf
-    │   └── variables.tf
-    ├── helm-charts/
-    │   ├── README.md
-    │   ├── main.tf
-    │   ├── outputs.tf
-    │   └── variables.tf
-    └── kubernetes-cluster/
-        ├── README.md
-        ├── kubernetes.tf
-        ├── outputs.tf
-        └── variables.tf
+    │   ├── gateway-api-example.yaml
+    │   ├── minio-backend/
+    │   │   ├── .env.example
+    │   │   ├── README.md
+    │   │   ├── backend.tf
+    │   │   └── docker-compose.yaml.example
+    │   └── seaweedfs-backend/
+    │       ├── README.md
+    │       ├── backend.tf
+    │       ├── docker-compose.yaml.example
+    │       └── s3.json.example
+    └── modules/
+        ├── argocd-gitops/
+        │   ├── README.md
+        │   ├── main.tf
+        │   ├── outputs.tf
+        │   └── variables.tf
+        ├── crds/
+        │   ├── main.tf
+        │   └── variables.tf
+        ├── gateway-api/
+        │   ├── README.md
+        │   ├── main.tf
+        │   ├── outputs.tf
+        │   └── variables.tf
+        ├── helm-charts/
+        │   ├── README.md
+        │   ├── main.tf
+        │   ├── outputs.tf
+        │   └── variables.tf
+        └── karpenter/
+            ├── main.tf
+            ├── outputs.tf
+            └── variables.tf
 ```
 
 ## Prerequisites
@@ -105,26 +120,27 @@ You also need:
 
 ## Quick start
 
-From repository root:
+From `infra/`:
 
 ```bash
+cd infra
 ./setup.sh
 ```
 
 Then ensure your SOPS key is exported (required before validation commands):
 
 ```bash
-export SOPS_AGE_KEY_FILE="/home/berk/hetznerk8s/keys.txt"
+export SOPS_AGE_KEY_FILE="$(git rev-parse --show-toplevel)/infra/keys.txt"
 ```
 
-If `secrets.yaml` is missing, create it from template and encrypt it:
+If `secrets.yaml` is missing, create it from template and encrypt it (from `infra/`):
 
 ```bash
 cp secrets.yaml.example secrets.yaml
 sops -e -i secrets.yaml
 ```
 
-Edit secrets anytime:
+Edit secrets anytime (from `infra/`):
 
 ```bash
 sops secrets.yaml
@@ -142,14 +158,15 @@ For each environment (`staging` or `production`), apply modules in this order:
 6. `gateway-api`
 
 Everything beyond the bootstrap charts (`argocd`, `external-dns`, `karpenter`) is deployed by
-ArgoCD from a separate, dedicated GitOps repository, not by Terraform. See
-`docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md` and
-`docs/gitops-repo-scaffold.md` for the full design and the GitOps repo's required conventions.
+ArgoCD from this same repository's top-level `apps/`/`platform/` directories, not by Terraform.
+See `docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md`,
+`docs/brainstorms/argocd-gitops-migration-requirements.md`'s 2026-08-01 amendment, and
+`docs/gitops-repo-scaffold.md` for the full design and required conventions.
 
-Example (`staging`):
+Example (`staging`, from `infra/`):
 
 ```bash
-cd environments/staging/kubernetes-cluster && terragrunt init -reconfigure && terragrunt apply
+cd infra/environments/staging/kubernetes-cluster && terragrunt init -reconfigure && terragrunt apply
 cd ../crds && terragrunt init -reconfigure && terragrunt apply
 cd ../karpenter && terragrunt init -reconfigure && terragrunt apply
 cd ../helm-charts && terragrunt init -reconfigure && terragrunt apply
@@ -159,18 +176,18 @@ cd ../gateway-api && terragrunt init -reconfigure && terragrunt apply
 
 ## Validation workflow (required)
 
-Run from repository root:
+Run from the true repository root:
 
 ```bash
-export SOPS_AGE_KEY_FILE="/home/berk/hetznerk8s/keys.txt"
+export SOPS_AGE_KEY_FILE="$(git rev-parse --show-toplevel)/infra/keys.txt"
 terragrunt hcl format
 terragrunt hcl validate
 ```
 
-Then validate changed stack(s):
+Then validate changed stack(s) (from `infra/`):
 
 ```bash
-cd environments/<env>/<module>
+cd infra/environments/<env>/<module>
 terragrunt init -reconfigure
 terragrunt validate
 ```
@@ -178,27 +195,29 @@ terragrunt validate
 Environment-specific checks:
 
 ```bash
-cd environments/staging/kubernetes-cluster && terragrunt validate
-cd environments/production/kubernetes-cluster && terragrunt validate
-cd environments/staging/gateway-api && terragrunt validate
-cd environments/production/gateway-api && terragrunt validate
+cd infra/environments/staging/kubernetes-cluster && terragrunt validate
+cd infra/environments/production/kubernetes-cluster && terragrunt validate
+cd infra/environments/staging/gateway-api && terragrunt validate
+cd infra/environments/production/gateway-api && terragrunt validate
 ```
 
 ## Common Make targets
 
-```bash
-make setup
-make edit-secrets
-make view-secrets
+Invoke via `make -C infra <target>` from the repository root, or `cd infra && make <target>`:
 
-make plan ENV=staging MODULE=kubernetes-cluster
-make apply ENV=staging MODULE=kubernetes-cluster
-make validate ENV=staging MODULE=gateway-api
+```bash
+make -C infra setup
+make -C infra edit-secrets
+make -C infra view-secrets
+
+make -C infra plan ENV=staging MODULE=kubernetes-cluster
+make -C infra apply ENV=staging MODULE=kubernetes-cluster
+make -C infra validate ENV=staging MODULE=gateway-api
 ```
 
 ## Notes
 
-- Keep secrets only in `secrets.yaml`; never hardcode credentials in HCL/Terraform.
-- `root.hcl` configures S3-compatible remote state from decrypted secrets.
+- Keep secrets only in `infra/secrets.yaml`; never hardcode credentials in HCL/Terraform.
+- `infra/root.hcl` configures S3-compatible remote state from decrypted secrets.
 - `gateway-api` depends on cluster + CRDs + helm charts; apply it last.
 - Some Terragrunt configs use deterministic fallbacks for static-safe validation when dependency outputs are unavailable.

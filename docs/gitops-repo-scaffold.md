@@ -5,9 +5,11 @@ topic: gitops-repo-scaffold
 
 # GitOps Repository Scaffold (Reference)
 
-Ready-to-copy content for the dedicated GitOps repository this migration depends on. That
-repository doesn't exist yet — create it separately, then copy the files below into it before
-applying `environments/staging/argocd-gitops`.
+Ready-to-copy content for this repository's own top-level `apps/`/`platform/` directories —
+this repo is the GitOps content repository (see
+`docs/brainstorms/argocd-gitops-migration-requirements.md`'s 2026-08-01 amendment, R10). Copy the
+files below into `apps/`/`platform/` at the true repo root before (re-)applying
+`infra/environments/staging/argocd-gitops`.
 
 Origin: [docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md](plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md)
 (origin requirements: [docs/brainstorms/argocd-gitops-migration-requirements.md](brainstorms/argocd-gitops-migration-requirements.md)).
@@ -63,7 +65,7 @@ dependencies:
 ```
 
 `values.yaml` (this chart currently takes no custom values — matches
-`environments/staging/env.hcl`'s pre-migration block exactly):
+`infra/environments/staging/env.hcl`'s pre-migration block exactly):
 
 ```yaml
 gha-runner-scale-set-controller: {}
@@ -113,7 +115,7 @@ dependencies:
     repository: "oci://ghcr.io/actions/actions-runner-controller-charts"
 ```
 
-`values.yaml` (reproduces `environments/staging/env.hcl`'s pre-migration values 1:1 —
+`values.yaml` (reproduces `infra/environments/staging/env.hcl`'s pre-migration values 1:1 —
 `githubConfigUrl` and `runnerGroup` need real values filled in; `githubConfigSecret` stays
 `github-arc-pat`, produced by the `SealedSecret` below, not by Terraform):
 

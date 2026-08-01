@@ -22,7 +22,7 @@ This module depends on the `kubernetes-cluster` module. Ensure it's deployed bef
 
 ```bash
 # Apply kubernetes-cluster first
-cd environments/<env>/kubernetes-cluster
+cd infra/environments/<env>/kubernetes-cluster
 terragrunt apply
 
 # Then apply gateway-api
