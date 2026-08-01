@@ -1,7 +1,7 @@
 ---
 title: Monorepo Layout for Terraform/Terragrunt + Self-Hosted ArgoCD GitOps Content
 type: refactor
-status: active
+status: completed
 date: 2026-08-01
 deepened: 2026-08-01
 origin: docs/brainstorms/argocd-gitops-migration-requirements.md
