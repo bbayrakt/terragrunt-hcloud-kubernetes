@@ -1,9 +1,17 @@
 ---
 date: 2026-07-30
+amended: 2026-08-01
 topic: argocd-gitops-migration
 ---
 
 # ArgoCD-Managed GitOps Migration for Non-Bootstrap Charts (Staging)
+
+> **Amendment (2026-08-01):** The GitOps content repository decision (originally R10/R11 — a
+> new, separate, dedicated repo) has been reversed. This repository now hosts both the
+> Terraform/Terragrunt infrastructure and the ArgoCD-managed GitOps content as a single
+> monorepo. See the "Monorepo repository layout" requirements group, the updated Key Decisions,
+> and the updated Scope Boundaries below for what changed and why. `docs/gitops-repo-scaffold.md`'s
+> file *contents* are unaffected by this amendment — only their target location changes.
 
 ## Problem Frame
 
@@ -53,8 +61,8 @@ This means every future chart addition requires a Terraform change, and there's 
 - R9. Both charts' Helm values move from `env.hcl`/Terragrunt into the GitOps repo's per-app configuration. ArgoCD/Helm installs and upgrades CRDs for these two charts directly; the existing Terraform `crds` stack is no longer involved for them.
 
 **GitOps repository conventions**
-- R10. A new, separate, dedicated git repository (not this Terraform repo) hosts app manifests — a mix of Helm-chart-based and Kustomize-based apps — organized under top-level `apps/` and `platform/` directories matching the two `ApplicationSet` generators.
-- R11. The repository is registered with ArgoCD via Terraform's `argocd_repository` resource; its access credential is sourced from this repo's existing SOPS-encrypted `secrets.yaml`, the same way other secrets are handled today.
+- R10. This repository is the GitOps content repository — no separate repo is created. `apps/` and `platform/` live as top-level directories at the true repo root (not inside the Terraform/Terragrunt subfolder), organized per the two `ApplicationSet` generators, hosting a mix of Helm-chart-based and Kustomize-based apps exactly as already scaffolded in `docs/gitops-repo-scaffold.md`.
+- R11. The repository (this one) is registered with ArgoCD via Terraform's `argocd_repository` resource; its access credential is sourced from this repo's existing SOPS-encrypted `secrets.yaml`, the same way other secrets are handled today. `gitops_repo_url` remains a plain configurable variable so a future reuser of this Terraform module can instead point it at a separate, dedicated split repo without any module code change.
 
 **Secrets management**
 - R12. `platform`-tier app secrets are SOPS-encrypted using a dedicated AGE key pair, separate from this repo's existing Terragrunt AGE key, and decrypted in-cluster via the KSOPS Kustomize plugin patched into the *existing* Terraform-managed `argocd` Helm release's repo-server configuration (init container, volumes, build options) — no new Helm chart is introduced for this.
@@ -63,6 +71,13 @@ This means every future chart addition requires a Terraform change, and there's 
 
 **Environment scope**
 - R15. This work applies to staging only. Production's `helm_charts`/`helm_secrets` inputs remain undefined and are unaffected by this effort.
+
+**Monorepo repository layout**
+- R16. All existing Terraform/Terragrunt content (`environments/`, `modules/`, `root.hcl`, `Makefile`, `setup.sh`, `examples/`, `secrets.yaml`, `secrets.yaml.example`, `keys.txt`) moves into a new top-level `infra/` subfolder, preserving its structure relative to itself unchanged.
+- R17. `apps/`, `platform/`, `docs/`, `.sops.yaml`, `README.md`, and `AGENTS.md` remain at the true repository root, not inside `infra/`.
+- R18. `.sops.yaml` stays at the true repository root specifically so its `path_regex` rules can match both `infra/secrets.yaml` (existing rule) and a new platform-tier rule for `platform/**/*.sops.yaml` from one shared config — SOPS resolves the nearest `.sops.yaml` by searching upward from the file being encrypted, so a copy nested inside `infra/` could not also govern the top-level `platform/` directory.
+- R19. The `modules/argocd-gitops` `ApplicationSet` directory-generator paths (currently hardcoded `apps/*` / `platform/*` literals in `main.tf`) become configurable via two new variables, `gitops_apps_path` and `gitops_platform_path`, defaulting to `"apps"` and `"platform"` respectively.
+- R20. `gitops_repo_url`'s variable description and the `modules/argocd-gitops` README are reworded to present self-referencing monorepo and dedicated split-repo as equally supported topologies, rather than describing a separate repo as the assumed or required convention.
 
 ---
 
@@ -73,6 +88,9 @@ This means every future chart addition requires a Terraform change, and there's 
 - An operator can add a new ordinary app under the GitOps repo's `apps/` directory and have it appear in the cluster automatically without touching Terraform, and that app cannot create any cluster-scoped resource.
 - An operator can add a new privileged app under `platform/` when it genuinely needs cluster-scoped install rights, with that need reviewable via an explicit whitelist rather than an unrestricted grant.
 - Secrets for both tiers can be committed to the GitOps repo safely (SOPS+AGE for `platform`, Sealed Secrets for `apps`), with no plaintext secret material ever stored in git.
+- Terraform/Terragrunt content lives entirely under `infra/`, and existing validation commands (once their paths are updated) still pass against the moved structure with no unintended remote-state drift.
+- ArgoCD's `argocd_repository`/`ApplicationSet` configuration can target either this monorepo (self-reference) or a separate split repo via `gitops_repo_url`, `gitops_apps_path`, and `gitops_platform_path` alone — no module code changes required to switch topology.
+- `apps/`/`platform/` GitOps content live at the true repo root exactly as already documented in `docs/gitops-repo-scaffold.md`, requiring no changes to that reference content's file layout.
 - Planning has enough architectural clarity (provider, resource types, tier boundaries, secrets tooling, repo layout convention) to design the concrete Terraform module/stack and GitOps repo scaffold without inventing product decisions.
 
 ---
@@ -81,10 +99,14 @@ This means every future chart addition requires a Terraform change, and there's 
 
 - Production is out of scope; its `helm_charts`/`helm_secrets` parity gap relative to staging is a separate, later effort.
 - `argocd`, `external-dns`, and `karpenter` are not being moved to ArgoCD-managed delivery in this effort — they remain the accepted Terraform bootstrap exceptions.
-- Creating the actual GitOps repository (and any CI around it) is not done as part of this brainstorm — the user will create it separately; this document defines the conventions it must follow.
+- No separate GitOps repository is created — this repo serves that role now; `docs/gitops-repo-scaffold.md`'s file *contents* remain valid and unchanged, only their target location moves from "a repo that doesn't exist yet" to this repo's true root.
 - No changes to how the existing `crds` Terraform stack manages CRDs for charts that remain Terraform-managed.
 - External Secrets Operator, OpenBao, and HashiCorp Vault were explicitly considered and declined in favor of Sealed Secrets for the `apps` tier (see Key Decisions) — not part of this effort.
 - The exact `apps`-project namespace allow-list, the exact `platform`-project cluster-resource whitelist entries, and Sealed Secrets' scope mode are not decided here — left to planning.
+- The exact file-move mechanics (command sequence, order, verifying no remote-state drift) for relocating Terraform/Terragrunt content into `infra/` are not decided here — left to planning/execution.
+- Updating every existing path reference this move touches (`AGENTS.md`'s validation commands, `README.md`'s repo-layout tree and quickstart, `Makefile` targets, `setup.sh`, the `modules/argocd-gitops` README's example URL) is required follow-up work, not itemized line-by-line in this document.
+- Whether production ever gets its own ArgoCD instance in this same repo — and if so, whether `apps/`/`platform/` stay a single shared tree or split per environment — is unresolved and explicitly deferred; it does not need to be decided now since production GitOps remains out of scope (R15).
+- Adding a convenience top-level shim (e.g. a thin root `Makefile` delegating into `infra/Makefile`) versus requiring operators to `cd infra` first is not decided here — low-stakes, left to planning.
 
 ---
 
@@ -105,6 +127,10 @@ This means every future chart addition requires a Terraform change, and there's 
 - **Sealed Secrets over OpenBao for the `apps` tier**: OpenBao is fully self-hostable but requires a genuinely stateful service (storage backend, unsealing, HA, upgrades) plus External Secrets Operator to actually land values in Kubernetes — non-trivial operational cost for routine app secrets with no stated need for dynamic/leased credentials or an audit trail. Sealed Secrets is a single controller, needs no ArgoCD repo-server patch (a `SealedSecret` is just another manifest ArgoCD applies normally), and adds a bonus name+namespace scoping guardrail on top.
 - **Sealed Secrets controller deployed via ArgoCD (`platform` tier), not Terragrunt**: it needs cluster-scoped resources (CRD, `ClusterRole`) to install, but isn't a bootstrap dependency — it can be one of the first `platform`-tier apps ArgoCD deploys once the stack is live, keeping it out of Terraform's Helm footprint.
 - **Staging only**: production's `helm_charts`/`helm_secrets` maps don't exist yet; bringing production to parity is a distinct, deferred effort.
+- **Monorepo over dedicated split repo**: this repository now hosts both the Terraform/Terragrunt infrastructure and the ArgoCD-managed GitOps content. For a single-operator repo with no team-based access-control layer or CI today, the operational overhead of a second repo/credential outweighs the isolation benefit a split repo would otherwise buy; `gitops_repo_url` staying a plain variable preserves the split-repo option for anyone who wants it later.
+- **`infra/` subfolder for Terraform/Terragrunt, not for the GitOps content**: moving the larger, pre-existing surface area (`environments/`, `modules/`, `root.hcl`, etc.) into `infra/` leaves the repo root free for `apps/`/`platform/`, letting `docs/gitops-repo-scaffold.md`'s already-written layout apply unchanged.
+- **`.sops.yaml` stays at the true repo root**: required for one shared config to govern both `infra/secrets.yaml` and top-level `platform/**/*.sops.yaml`, since SOPS resolves the nearest `.sops.yaml` upward from the encrypted file, not from a fixed repo-relative path.
+- **ApplicationSet directory paths made configurable (`gitops_apps_path`/`gitops_platform_path`)**: keeps the `apps/`/`platform/` naming convention a default, not a hardcoded assumption, so this module stays reusable by someone who prefers different directory names or a split-repo layout.
 
 ---
 
@@ -132,6 +158,10 @@ This means every future chart addition requires a Terraform change, and there's 
 - [Affects R12][Technical] Exact KSOPS version/image pin and the specific `argo-cd` chart values needed to patch `repo-server` for the currently pinned chart version (`9.4.5`).
 - [Affects R14][Needs research] Sealed Secrets scope mode (default name+namespace vs. `namespace-wide`) and where its own Helm values/version are declared once it's a `platform`-tier app.
 - [Affects R9][Technical] How does the existing `github-arc-pat` secret (currently pre-created by the Terraform `helm-charts` module) get re-homed once `gha-runner-scale-set` moves to the `apps` tier — as a `SealedSecret` authored in the GitOps repo, or still Terraform-created and referenced?
+- [Affects R16][Technical] Exact sequence of `git mv` operations and path-reference updates (`AGENTS.md`, `README.md`, `Makefile`, `setup.sh`, `root.hcl`'s `find_in_parent_folders` calls) needed to relocate Terraform/Terragrunt into `infra/` without breaking anything.
+- [Affects R16][Needs research] Verify that moving `root.hcl` + `environments/` + `modules/` together into `infra/` preserves `path_relative_to_include()`-derived S3 remote-state keys exactly (expected: yes, since the relative structure between `root.hcl` and its children is unchanged) — confirm via a no-op `terragrunt plan` per stack immediately after the move, before the next real `apply`.
+- [Affects R11, R20][Technical] Whether to generate a brand-new read-only SSH deploy key scoped to this repo for ArgoCD, and how it's added on GitHub (repo deploy key vs. a machine user), given `gitops_repo_url` now self-references this repo.
+- [Affects R16][Needs research] Whether `docs/gitops-repo-scaffold.md` should be merged into this document, converted directly into real files under `apps/`/`platform/`, or kept as a standalone historical reference once the layout is realized.
 
 ---
 

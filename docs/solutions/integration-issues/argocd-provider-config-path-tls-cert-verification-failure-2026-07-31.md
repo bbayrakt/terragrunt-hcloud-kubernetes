@@ -47,7 +47,7 @@ The `argoproj-labs/argocd` Terraform provider (v7.15.3, `port_forward_with_names
 
 Stop relying on the `argocd` provider's top-level `config_path` attribute. Instead, explicitly parse the kubeconfig file in Terragrunt `locals` and feed the connection details into the provider's `kubernetes { }` sub-block — a structurally distinct construct from `config_path` (the sub-block has its own explicit connection attributes and no `config_path` field of its own).
 
-`environments/staging/argocd-gitops/terragrunt.hcl`:
+`infra/environments/staging/argocd-gitops/terragrunt.hcl`:
 
 ```hcl
 locals {

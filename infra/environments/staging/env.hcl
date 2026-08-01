@@ -20,6 +20,11 @@ inputs = {
   gitops_repo_url             = local.secrets.gitops_repo_url
   gitops_repo_ssh_private_key = local.secrets.gitops_repo_ssh_private_key
 
+  # Top-level directory (relative to gitops_repo_url) each tier's ApplicationSet watches --
+  # defaults match the layout this repo actually uses (apps/, platform/ at the true repo root).
+  gitops_apps_path     = "apps"
+  gitops_platform_path = "platform"
+
   cert_manager_enabled = true
 
   cilium_encryption_enabled = true

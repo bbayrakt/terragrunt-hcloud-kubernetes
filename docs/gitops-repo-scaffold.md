@@ -5,9 +5,11 @@ topic: gitops-repo-scaffold
 
 # GitOps Repository Scaffold (Reference)
 
-Ready-to-copy content for the dedicated GitOps repository this migration depends on. That
-repository doesn't exist yet — create it separately, then copy the files below into it before
-applying `environments/staging/argocd-gitops`.
+Ready-to-copy content for this repository's own top-level `apps/`/`platform/` directories —
+this repo is the GitOps content repository (see
+`docs/brainstorms/argocd-gitops-migration-requirements.md`'s 2026-08-01 amendment, R10). Copy the
+files below into `apps/`/`platform/` at the true repo root before (re-)applying
+`infra/environments/staging/argocd-gitops`.
 
 Origin: [docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md](plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md)
 (origin requirements: [docs/brainstorms/argocd-gitops-migration-requirements.md](brainstorms/argocd-gitops-migration-requirements.md)).
@@ -16,7 +18,7 @@ Origin: [docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md](plans/2
 
 The plan's Open Questions left "the exact `ApplicationSet` templating mechanism for varying
 `source.chart`/`source.repoURL` per app directory" to implementation. The `argocd_application_set`
-Terraform resources actually implemented (`modules/argocd-gitops/main.tf`) use a single git-path
+Terraform resources actually implemented (`infra/modules/argocd-gitops/main.tf`) use a single git-path
 `source` per tier (`source.repo_url = <this GitOps repo>`, `source.path = "{{path}}"`) — ArgoCD
 auto-detects the rendering tool from each directory's own content (`Chart.yaml` → Helm,
 `kustomization.yaml` → Kustomize, otherwise plain manifests).
@@ -36,7 +38,7 @@ Go-templated files.
 
 **Naming convention — directory name is the target namespace, not the chart name (found by
 ce-code-review, corrected on this revision).** The `ApplicationSet` template sets
-`destination.namespace = "{{path.basename}}"` (`modules/argocd-gitops/main.tf`) — the destination
+`destination.namespace = "{{path.basename}}"` (`infra/modules/argocd-gitops/main.tf`) — the destination
 namespace is literally the directory's basename, not something separately configurable per app
 with this template. An earlier revision of this doc named directories after the *chart*
 (`apps/gha-runner-scale-set/`, `platform/gha-runner-scale-set-controller/`), which would have
@@ -44,7 +46,7 @@ resolved to destination namespaces that don't exist in either `AppProject`'s all
 causing every sync to fail outright. Directories below are named after the **namespace** each
 app actually deploys into instead. If a future app needs a namespace not yet in
 `apps_destination_namespaces` / `platform_destination_namespaces`
-(`modules/argocd-gitops/variables.tf`), add it there first.
+(`infra/modules/argocd-gitops/variables.tf`), add it there first.
 
 ---
 
@@ -63,7 +65,7 @@ dependencies:
 ```
 
 `values.yaml` (this chart currently takes no custom values — matches
-`environments/staging/env.hcl`'s pre-migration block exactly):
+`infra/environments/staging/env.hcl`'s pre-migration block exactly):
 
 ```yaml
 gha-runner-scale-set-controller: {}
@@ -113,7 +115,7 @@ dependencies:
     repository: "oci://ghcr.io/actions/actions-runner-controller-charts"
 ```
 
-`values.yaml` (reproduces `environments/staging/env.hcl`'s pre-migration values 1:1 —
+`values.yaml` (reproduces `infra/environments/staging/env.hcl`'s pre-migration values 1:1 —
 `githubConfigUrl` and `runnerGroup` need real values filled in; `githubConfigSecret` stays
 `github-arc-pat`, produced by the `SealedSecret` below, not by Terraform):
 

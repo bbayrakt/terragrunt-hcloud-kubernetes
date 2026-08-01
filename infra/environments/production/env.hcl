@@ -53,7 +53,7 @@ inputs = {
   ]
 
   # ==================== Gateway API Configuration ====================
-  
+
   lb_name     = local.secrets.gateway_api_lb_name
   lb_location = "nbg1"
   lb_type     = "lb11"
