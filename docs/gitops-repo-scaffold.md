@@ -101,7 +101,15 @@ sealed-secrets:
 > `kube-system` to a dedicated `sealed-secrets` namespace (see `variables.tf`) as part of the
 > naming-convention fix above.
 
-## `apps/arc-runners/`
+## `platform/arc-runners/` (moved here from `apps/arc-runners/` on 2026-08-02 -- see below)
+
+> **Amendment (2026-08-02):** This directory was originally specified under `apps/`. Live testing
+> found `gha-runner-scale-set` unconditionally creates its own namespace-scoped manager
+> `Role`+`RoleBinding` (granting the `arc-systems` controller's ServiceAccount cross-namespace
+> access) -- no chart values flag disables this. The `apps` tier must never have RBAC-object
+> creation rights (see `docs/brainstorms/argocd-gitops-migration-requirements.md`'s Key Decisions),
+> so this whole directory lives under `platform/` instead. Content below is otherwise unchanged
+> from the original design; only the parent tier differs.
 
 `Chart.yaml`:
 
@@ -172,15 +180,17 @@ so this rule picks it up, and reference it via a KSOPS generator per the upstrea
 ## Full expected layout
 
     apps/
+        (no ordinary app has been added yet -- gha-runner-scale-set was tried here, then moved
+        to platform/arc-runners/ per the 2026-08-02 amendment above)
+    platform/
+        arc-systems/
+            Chart.yaml
+            values.yaml
         arc-runners/
             Chart.yaml
             values.yaml
             templates/
                 sealed-secret.yaml
-    platform/
-        arc-systems/
-            Chart.yaml
-            values.yaml
         sealed-secrets/
             Chart.yaml
             values.yaml

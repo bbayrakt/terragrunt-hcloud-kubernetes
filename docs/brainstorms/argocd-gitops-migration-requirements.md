@@ -57,7 +57,7 @@ This means every future chart addition requires a Terraform change, and there's 
 
 **Chart migration**
 - R7. `gha-runner-scale-set-controller` moves from Terraform-managed Helm to an ArgoCD-managed app in the `platform` tier, because it installs its own CRDs (cluster-scoped).
-- R8. `gha-runner-scale-set` moves from Terraform-managed Helm to an ArgoCD-managed app in the `apps` tier (it only creates namespaced custom-resource instances).
+- R8. `gha-runner-scale-set` moves from Terraform-managed Helm to an ArgoCD-managed app. **Corrected 2026-08-02:** originally specified as `apps` tier on the assumption it "only creates namespaced custom-resource instances" -- live testing found it also unconditionally creates its own namespace-scoped manager `Role`+`RoleBinding` (no chart values flag disables this), which is RBAC-object creation the `apps` tier must never permit (see Key Decisions). It lives in the `platform` tier instead, at `platform/arc-runners/`.
 - R9. Both charts' Helm values move from `env.hcl`/Terragrunt into the GitOps repo's per-app configuration. ArgoCD/Helm installs and upgrades CRDs for these two charts directly; the existing Terraform `crds` stack is no longer involved for them.
 
 **GitOps repository conventions**
@@ -114,7 +114,7 @@ This means every future chart addition requires a Terraform change, and there's 
 
 | Tier | AppProject cluster-resource rule | Destination scope | Backing generator path | Secrets tool | Example chart |
 |---|---|---|---|---|---|
-| `apps` | Blacklist all cluster-scoped kinds | Explicit namespace allow-list | `apps/*` | Sealed Secrets | `gha-runner-scale-set` |
+| `apps` | Blacklist all cluster-scoped kinds, plus namespaced `Role`/`RoleBinding` | Explicit namespace allow-list | `apps/*` | Sealed Secrets | (none yet -- `gha-runner-scale-set` was tried here, found to need RBAC-object creation rights, moved to `platform`) |
 | `platform` | Explicit whitelist of needed kinds only | Broader, but still project-scoped | `platform/*` | SOPS + AGE (dedicated key) + KSOPS | `gha-runner-scale-set-controller`, Sealed Secrets controller itself |
 
 - **Bootstrap exceptions stay Terraform-managed**: `argocd`, `external-dns`, and `karpenter` all have genuine chicken-and-egg dependencies — ArgoCD must exist before it can deploy anything, ExternalDNS underpins DNS resolution that ArgoCD's own route needs, and Karpenter must exist before most workloads can schedule (the `helm-charts` stack's before-hooks already gate on Karpenter readiness).
@@ -124,7 +124,7 @@ This means every future chart addition requires a Terraform change, and there's 
 - **Cluster-scoped resource creation is the enforcement axis, not the templating engine**: both tiers can contain Helm-chart-based or Kustomize-based apps; what differs is the `AppProject`'s `cluster_resource_whitelist`/`blacklist`, which inspects the rendered manifest's kind regardless of how it was templated.
 - **ArgoCD/Helm owns CRDs for ArgoCD-managed charts**: simpler than extending the existing Terraform `crds` stack to track a second, disjoint set of charts; accepted trade-off is losing that stack's `prevent_destroy` CRD safety net for these two charts specifically.
 - **Two dedicated AGE keys (one per tier), separate from this repo's Terragrunt AGE key**: control who can *author/encrypt* secrets for which tier locally. Note: in-cluster, `argocd-repo-server` still needs both private keys available to decrypt either tier's manifests, since one repo-server renders both paths — the separation is an authoring-side boundary, not an in-cluster decrypt-time boundary.
-- **`apps`-tier `Role`/`RoleBinding` creation allowed, not blacklisted (amended 2026-08-02, found during U7 execution)**: R4's original design blacklisted both kinds entirely to prevent an apps-tier app from binding a pre-existing, possibly-dangerous `ClusterRole` to escalate. But `gha-runner-scale-set` needs to create its own self-contained, namespace-scoped `Role`+`RoleBinding` granting the platform-tier controller's ServiceAccount (a different namespace) permission to manage runner Pods — the standard ARC cross-namespace pattern, not a reference to any pre-existing `ClusterRole`. ArgoCD's `namespace_resource_blacklist` is kind-level only, with no `roleRef`-aware check, so it can't distinguish this legitimate case from the actual escalation vector R4 targeted — there's no narrower ArgoCD-native middle ground. **Accepted risk, solo-operator scope only** (same treatment as the shared-KSOPS-decrypt-key risk below): a future apps-tier manifest could in principle bind a pre-existing powerful `ClusterRole` (e.g. `cluster-admin`) via `RoleBinding` to escalate cluster-scoped access. Revisit with a `roleRef`-aware admission policy (Kyverno/OPA) if/when a collaborator with apps/-only push access is introduced. Considered and rejected: moving `gha-runner-scale-set` to the `platform` tier instead — `platform` already carries *more* cluster-scoped privilege, so that trades a smaller risk for a strictly bigger one.
+- **`apps`-tier `Role`/`RoleBinding` creation stays blacklisted, permanently — confirmed and clarified 2026-08-02**: R4's blacklist prevents an apps-tier app from binding a pre-existing, possibly-dangerous `ClusterRole` to escalate. During U7 execution, `gha-runner-scale-set` was found to need its own self-contained, namespace-scoped `Role`+`RoleBinding` (granting the platform-tier controller's ServiceAccount, in a different namespace, permission to manage runner Pods -- the standard ARC cross-namespace pattern, not a reference to any pre-existing `ClusterRole`). An initial fix attempt removed the blacklist as an "accepted solo-operator risk" and was reverted the same session: **the user clarified that `apps/` is not a solo-operator convenience tier that happens to be unshared today -- it is designed from inception as the tier ordinary cluster *users* (not cluster admins) will push to, and RBAC-escalation rights are never an acceptable risk there, not even temporarily.** ArgoCD's `namespace_resource_blacklist` is kind-level only (no `roleRef`-aware check), so it genuinely cannot distinguish this legitimate self-contained case from the actual escalation vector R4 targets -- there is no narrower ArgoCD-native middle ground that preserves the boundary while accommodating this chart. **Resolution: any app needing RBAC-object (`Role`/`RoleBinding`) or cluster-scoped creation rights belongs in `platform/`, full stop -- this is a hard architectural rule, not a case-by-case risk call.** `gha-runner-scale-set` moved to `platform/arc-runners/` accordingly (R8 corrected above). If a `roleRef`-aware admission policy (Kyverno/OPA) is ever built to distinguish self-contained `Role`s from `ClusterRole`-referencing ones, that would be additional defense-in-depth on top of this rule, not a replacement for it.
 - **Sealed Secrets over OpenBao for the `apps` tier**: OpenBao is fully self-hostable but requires a genuinely stateful service (storage backend, unsealing, HA, upgrades) plus External Secrets Operator to actually land values in Kubernetes — non-trivial operational cost for routine app secrets with no stated need for dynamic/leased credentials or an audit trail. Sealed Secrets is a single controller, needs no ArgoCD repo-server patch (a `SealedSecret` is just another manifest ArgoCD applies normally), and adds a bonus name+namespace scoping guardrail on top.
 - **Sealed Secrets controller deployed via ArgoCD (`platform` tier), not Terragrunt**: it needs cluster-scoped resources (CRD, `ClusterRole`) to install, but isn't a bootstrap dependency — it can be one of the first `platform`-tier apps ArgoCD deploys once the stack is live, keeping it out of Terraform's Helm footprint.
 - **Staging only**: production's `helm_charts`/`helm_secrets` maps don't exist yet; bringing production to parity is a distinct, deferred effort.
@@ -171,10 +171,12 @@ which remain the plan's only unchecked units.
   user pulls it in.
 
 **Execution completed (2026-08-02):** U5, U6, and U7 are all live on staging --
-`platform-sealed-secrets`, `platform-arc-systems`, and `apps-arc-runners` are all Synced/Healthy,
-and the runner Pod is confirmed connected to GitHub and listening for jobs. Four real gaps were
-found and fixed during live execution (all in `infra/modules/argocd-gitops/`, none anticipated by
-this document or the plan except the last one):
+`platform-sealed-secrets`, `platform-arc-systems`, and `platform-arc-runners` are all Synced/Healthy,
+and the runner Pod is confirmed connected to GitHub and listening for jobs. `gha-runner-scale-set`
+ended up in `platform/arc-runners/`, not `apps/arc-runners/` as R8 originally specified -- see the
+R8 correction note and Key Decisions entry below for why. Four real gaps were found during live
+execution (all in `infra/modules/argocd-gitops/`, none anticipated by this document or the plan
+except the last one):
 
 1. Neither AppProject whitelisted `Namespace`, so `CreateNamespace=true` failed for every
    platform-tier and apps-tier app's first sync -- added an explicit `Namespace` whitelist entry
@@ -185,13 +187,16 @@ this document or the plan except the last one):
    controller issue) -- added `ServerSideApply=true` to the `platform` `ApplicationSet`.
 3. `gha-runner-scale-set`'s cross-namespace controller-ServiceAccount auto-discovery (Helm
    `lookup()`) only searches its own release namespace -- set `controllerServiceAccount.name`/
-   `.namespace` explicitly in `apps/arc-runners/values.yaml`.
-4. The `apps` `AppProject`'s blanket `Role`/`RoleBinding` blacklist (R4's anti-escalation design)
-   also blocked this chart's own legitimate namespace-scoped manager `Role`/`RoleBinding` --
-   removed the blacklist as an accepted solo-operator risk, decided with the user (see Key
-   Decisions below); and downgraded `apps_pod_security_level` from `restricted` to `baseline`
-   for the same namespace, which this document's origin plan had already anticipated as a
-   contingency in U7's Test scenarios.
+   `.namespace` explicitly in `values.yaml`.
+4. `gha-runner-scale-set` unconditionally creates its own namespace-scoped manager
+   `Role`+`RoleBinding` (no chart values flag disables this), which the `apps` `AppProject`'s
+   `Role`/`RoleBinding` blacklist (R4's anti-escalation design) correctly blocked. **R8 correction:**
+   this chart does not "only create namespaced custom-resource instances" as R8 assumed -- it also
+   needs RBAC-object creation rights, which per this document's trust model belongs exclusively to
+   `platform/`. Moved the whole chart to `platform/arc-runners/` instead of loosening the `apps`
+   boundary (see Key Decisions for the full reasoning and the reverted first attempt). No PSA
+   downgrade was needed in its corrected home, since `platform`-tier namespaces carry no
+   `managed_namespace_metadata`/PSA enforcement at all.
 
 See `docs/plans/2026-07-30-001-feat-argocd-gitops-migration-plan.md` (now `status: completed`)
 for the full per-unit implementation notes.
@@ -212,7 +217,7 @@ for the full per-unit implementation notes.
 - [Affects R11][Technical] SSH deploy key vs. HTTPS token for the `argocd_repository` credential to the new GitOps repo?
 - [Affects R12][Technical] Exact KSOPS version/image pin and the specific `argo-cd` chart values needed to patch `repo-server` for the currently pinned chart version (`9.4.5`).
 - [Affects R14][Needs research] Sealed Secrets scope mode (default name+namespace vs. `namespace-wide`) and where its own Helm values/version are declared once it's a `platform`-tier app.
-- [Affects R9][Resolved 2026-08-02] How does the existing `github-arc-pat` secret get re-homed once `gha-runner-scale-set` moves to the `apps` tier? **As a `SealedSecret`** authored in `apps/arc-runners/templates/sealed-secret.yaml`, generated via `kubeseal` against the live Sealed Secrets controller from the real `github_token` in `infra/secrets.yaml`.
+- [Affects R9][Resolved 2026-08-02] How does the existing `github-arc-pat` secret get re-homed once `gha-runner-scale-set` moves off Terraform? **As a `SealedSecret`** authored in `platform/arc-runners/templates/sealed-secret.yaml` (moved here from `apps/` -- see R8's correction), generated via `kubeseal` against the live Sealed Secrets controller from the real `github_token` in `infra/secrets.yaml`.
 - [Affects R16][Technical] Exact sequence of `git mv` operations and path-reference updates (`AGENTS.md`, `README.md`, `Makefile`, `setup.sh`, `root.hcl`'s `find_in_parent_folders` calls) needed to relocate Terraform/Terragrunt into `infra/` without breaking anything.
 - [Affects R16][Needs research] Verify that moving `root.hcl` + `environments/` + `modules/` together into `infra/` preserves `path_relative_to_include()`-derived S3 remote-state keys exactly (expected: yes, since the relative structure between `root.hcl` and its children is unchanged) — confirm via a no-op `terragrunt plan` per stack immediately after the move, before the next real `apply`.
 - [Affects R11, R20][Technical] Whether to generate a brand-new read-only SSH deploy key scoped to this repo for ArgoCD, and how it's added on GitHub (repo deploy key vs. a machine user), given `gitops_repo_url` now self-references this repo.
