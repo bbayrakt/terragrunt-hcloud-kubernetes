@@ -75,6 +75,18 @@ Only run checks if changes are made in the corresponding module.
 - Staging ArgoCD GitOps:
   - `cd infra/environments/staging/argocd-gitops && terragrunt validate`
 
+## Automated CI validation (staging)
+
+PRs touching `infra/environments/staging/**` or `infra/modules/**` trigger
+`.github/workflows/terragrunt-validate.yml`, which runs the same validation steps as the
+Required validation workflow above:
+
+- **lint job** (ungated, no secret access): `terragrunt hcl format --check` + `terragrunt hcl
+  validate` at repo root.
+- **validate job** (approval-gated): `terragrunt init -reconfigure && terragrunt validate --all`
+  from `infra/environments/staging/`, using a dedicated CI-only SOPS age key. Runs inside the
+  GitHub Environment `ci-secrets-staging` (required reviewers, "Prevent self-review" enabled).
+
 ## Notes
 - If a dependency output is unavailable during `terragrunt hcl validate`, use deterministic local fallbacks in Terragrunt expressions so validation remains static-safe.
 - Do not hardcode secrets in HCL/Terraform files; keep secrets in `infra/secrets.yaml` and decrypt via SOPS.

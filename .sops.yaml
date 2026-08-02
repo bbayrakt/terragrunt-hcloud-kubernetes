@@ -11,11 +11,8 @@ creation_rules:
   # Encrypt all secrets.yaml files using age
   - path_regex: secrets\.yaml$
     age: >-
-      age15ua6rtpkgylqj7x8ay6zs28tktelnlldc03k69296kv3sd70zexs2v2369
-    # Alternatively, use multiple keys for redundancy:
-    # age: >-
-    #   age1key1...,
-    #   age2key2...
+      age15ua6rtpkgylqj7x8ay6zs28tktelnlldc03k69296kv3sd70zexs2v2369,
+      age1k6rpce6jegnm5xtq6j0uthyv5r4zsdvja4rfy55hxqjyfmn7xuxse75rcj
 
   # Example: Use PGP for specific environments
   # - path_regex: environments/production/.*secrets\.yaml$
