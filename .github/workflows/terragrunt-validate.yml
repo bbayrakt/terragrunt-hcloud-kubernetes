@@ -65,6 +65,8 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     environment: ci-secrets-staging
+    env:
+      SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,13 +92,6 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq age
-
-      - name: Configure SOPS key
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: |
-          echo "$SOPS_AGE_KEY" > /tmp/ci-age-key.txt
-          echo "SOPS_AGE_KEY_FILE=/tmp/ci-age-key.txt" >> "$GITHUB_ENV"
 
       - name: Terragrunt Validate
         working-directory: infra/environments/staging
