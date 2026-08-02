@@ -37,7 +37,7 @@
   ],
   "packageRules": [
     {
-      "description": "Exclude production paths entirely — v1 staging-only scope",
+      "description": "Exclude production paths entirely \u2014 v1 staging-only scope",
       "matchFilePrefixes": [
         "infra/environments/production/"
       ],
@@ -150,6 +150,43 @@
       "depNameTemplate": "argo-cd",
       "registryUrlTemplate": "https://argoproj.github.io/argo-helm",
       "datasourceTemplate": "helm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track Terragrunt version in CI workflow",
+      "fileMatch": [
+        "\\.github/workflows/.*\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "TERRAGRUNT_VERSION=\"(?<currentValue>v[^\"]+)\""
+      ],
+      "depNameTemplate": "gruntwork-io/terragrunt",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Track SOPS version in CI workflow",
+      "fileMatch": [
+        "\\.github/workflows/.*\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "SOPS_VERSION=\"(?<currentValue>v[^\"]+)\""
+      ],
+      "depNameTemplate": "getsops/sops",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Track Terraform version in CI workflow (setup-terraform with: terraform_version)",
+      "fileMatch": [
+        "\\.github/workflows/.*\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "terraform_version:\\s*\"?(?<currentValue>[^\\s\"]+)"
+      ],
+      "depNameTemplate": "hashicorp/terraform",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
     }
   ],
   "repositories": [
