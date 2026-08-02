@@ -232,6 +232,83 @@ cd infra/environments/staging/gateway-api && terragrunt validate
 cd infra/environments/production/gateway-api && terragrunt validate
 ```
 
+## Automated dependency updates (staging) and CI validation
+
+### Renovate (hosted GitHub App)
+
+Staging's dependency versions are managed by the hosted Renovate GitHub App on a **weekly
+schedule**, with bump PRs **grouped by category** and **no auto-merge** — every PR requires manual
+review and merge. See [docs/brainstorms/renovate-dependency-updates-staging-requirements.md](docs/brainstorms/renovate-dependency-updates-staging-requirements.md)
+for the rationale, and `.github/renovate.json` for the config.
+
+Scope (v1):
+
+- `infra/environments/staging/**` — Terraform provider constraints in `generate` blocks,
+  `kubernetes_module_version` git ref, `helm_charts` map versions, `karpenter_chart_version`,
+  `external_dns_version`.
+- `platform/**/Chart.yaml` (and future `apps/**/Chart.yaml`) — ArgoCD-managed Helm chart
+dependencies.
+- `.github/workflows/*.yml` — the CI workflow's own GitHub Actions (`github-actions` manager).
+- Production (`infra/environments/production/**`) is **explicitly excluded** from v1 scope.
+
+Bump PRs are grouped into four categories: **Terraform providers**, **external module ref**
+(`kubernetes_module_version`), **Terraform-managed Helm charts**, and **ArgoCD-managed Helm
+charts**.
+
+> ⚠️ **ArgoCD-managed chart bumps deploy on merge.** `platform/`/`apps/` `Chart.yaml` bumps are
+> picked up by ArgoCD's `ApplicationSet` (`automated { prune: true }` sync policy) on its next
+> reconcile — there is **no separate `terragrunt apply` gate** for this category, unlike the other
+> three (which all require the operator to run `terragrunt apply` after merge). Review these PRs
+> with equal or greater scrutiny, and spot-check with `helm template` before merging.
+
+### CI workflow (`.github/workflows/terragrunt-validate.yml`)
+
+Every PR touching `infra/environments/staging/**` or `infra/modules/**` runs the existing manual
+validation sequence as two jobs:
+
+1. **lint** (ungated, no secrets): `terragrunt hcl format --check` + `terragrunt hcl validate`
+   from the repo root.
+2. **validate** (approval-gated): `terragrunt init -reconfigure && terragrunt validate --all`
+   from `infra/environments/staging/`, using a dedicated **CI-only SOPS age key**.
+
+The validate job runs inside the GitHub **environment `ci-secrets-staging`**, which has
+**required reviewers** configured — a human must approve the run before it starts. This closes the
+code-execution-before-review gap: Terragrunt evaluates `generate`/`before_hook` blocks as ordinary
+config parsing, so without this gate a PR-supplied hook could exfiltrate decrypted secrets before
+anyone reviewed the diff. The `SOPS_AGE_KEY` secret is an **environment secret** bound to
+`ci-secrets-staging` (not a repository secret), so no other job in the repo can read it, and
+"Prevent self-review" is enabled so the PR author can't approve their own run.
+
+> ⚠️ The required-reviewer environment protection is **public-repo-only** on GitHub's Free/Pro/Team
+> plans and is silently ignored if this repository is ever made private. Re-verify the gate is
+> still active if repo visibility ever changes.
+
+### CI-only SOPS age key (blast radius)
+
+`.sops.yaml` has **two age recipients** for `infra/secrets.yaml`: the operator's personal key
+(`infra/keys.txt`) and a dedicated CI key (private key stored only as the `SOPS_AGE_KEY` GitHub
+environment secret). The CI key can decrypt the **full shared `infra/secrets.yaml`** — there is
+one file and one recipient rule for both staging and production. In concrete terms, the CI key
+can read: the Hetzner Cloud API token (account control), the Cloudflare API token, the GitOps
+repository's SSH deploy key (write access into the GitOps repo), SeaweedFS/S3 credentials, and the
+platform-tier SOPS age key (which itself decrypts `platform/` KSOPS secrets). This residual
+blasting radius is bounded by the approval gate above — the key is only reachable after a human
+approves a specific run — and by the key being independently revocable without touching the
+operator's own key.
+
+**Recipient rotation runbook (standing procedure):** whenever `.sops.yaml`'s recipient list
+changes (rotating the CI key, rotating the operator's key, or a future per-environment secrets
+split), re-run `sops updatekeys` against `infra/secrets.yaml` for the **current full recipient
+set** and re-verify decrypt with every remaining key. Recipient metadata is baked into the
+encrypted file at `updatekeys` time, not re-derived from `.sops.yaml` on every edit — a skipped
+`updatekeys` run fails silently (the file keeps decrypting for whoever was already embedded, with
+no error signaling that a newly-declared recipient is locked out).
+
+Note: `infra/modules/karpenter/terraform.tf`'s Renovate coverage is deliberately scoped to staging
+paths (via `.github/renovate.json`'s `terraform` manager `fileMatch`) rather than left on
+Renovate's default `**/*.tf` match, so it doesn't silently start touching production once
+production adopts the `karpenter` stack.
+
 ## Notes
 
 - Keep secrets only in `infra/secrets.yaml`; never hardcode credentials in HCL/Terraform.

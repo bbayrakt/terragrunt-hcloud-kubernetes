@@ -1,0 +1,158 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "terraform",
+    "terragrunt",
+    "helm",
+    "github-actions",
+    "custom.regex"
+  ],
+  "terraform": {
+    "fileMatch": [
+      "infra/environments/staging/**/terragrunt.hcl",
+      "infra/modules/karpenter/terraform.tf"
+    ]
+  },
+  "terragrunt": {
+    "fileMatch": [
+      "infra/environments/staging/**/terragrunt.hcl"
+    ]
+  },
+  "helm": {
+    "fileMatch": [
+      "platform/**/Chart.yaml",
+      "apps/**/Chart.yaml"
+    ]
+  },
+  "automerge": false,
+  "schedule": [
+    "before 9am on Monday"
+  ],
+  "labels": [
+    "dependencies",
+    "staging"
+  ],
+  "packageRules": [
+    {
+      "description": "Exclude production paths entirely — v1 staging-only scope",
+      "matchFilePrefixes": [
+        "infra/environments/production/"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Group: Terraform provider version bumps",
+      "matchDatasources": [
+        "terraform-provider"
+      ],
+      "groupName": "Terraform providers",
+      "groupSlug": "terraform-providers"
+    },
+    {
+      "description": "Group: External module git-ref bump (kubernetes_module_version)",
+      "matchDatasources": [
+        "github-tags"
+      ],
+      "groupName": "External module ref",
+      "groupSlug": "external-module-ref"
+    },
+    {
+      "description": "Group: Terraform-managed Helm chart versions (helm_charts map + karpenter + external_dns)",
+      "matchDatasources": [
+        "helm",
+        "docker"
+      ],
+      "matchFilePrefixes": [
+        "infra/environments/staging/"
+      ],
+      "groupName": "Terraform-managed Helm charts",
+      "groupSlug": "terraform-helm-charts"
+    },
+    {
+      "description": "Group: ArgoCD-managed Helm chart dependency versions (platform/*/Chart.yaml)",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchFilePrefixes": [
+        "platform/",
+        "apps/"
+      ],
+      "groupName": "ArgoCD-managed Helm charts",
+      "groupSlug": "argocd-helm-charts"
+    }
+  ],
+  "ignorePaths": [
+    "infra/environments/production/**"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track kubernetes_module_version git ref in staging/env.hcl",
+      "fileMatch": [
+        "infra/environments/staging/env\\.hcl$"
+      ],
+      "matchStrings": [
+        "kubernetes_module_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "hcloud-k8s/terraform-hcloud-kubernetes",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Track external_dns_version standalone input in staging/env.hcl",
+      "fileMatch": [
+        "infra/environments/staging/env\\.hcl$"
+      ],
+      "matchStrings": [
+        "external_dns_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "external-dns",
+      "registryUrlTemplate": "https://kubernetes-sigs.github.io/external-dns/",
+      "datasourceTemplate": "helm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track karpenter_chart_version (OCI) in staging/env.hcl",
+      "fileMatch": [
+        "infra/environments/staging/env\\.hcl$"
+      ],
+      "matchStrings": [
+        "karpenter_chart_version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "ghcr.io/paperclipinc/charts/karpenter-provider-hetzner",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Track external-dns Helm chart version in helm_charts map",
+      "fileMatch": [
+        "infra/environments/staging/env\\.hcl$"
+      ],
+      "matchStrings": [
+        "(?s)external-dns\\s*=\\s*\\{[^}]*?version\\s*=\\s*\"(?<currentValue>[^\"]+)\"\\s*\\n"
+      ],
+      "depNameTemplate": "external-dns",
+      "registryUrlTemplate": "https://kubernetes-sigs.github.io/external-dns/",
+      "datasourceTemplate": "helm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track argo-cd Helm chart version in helm_charts map",
+      "fileMatch": [
+        "infra/environments/staging/env\\.hcl$"
+      ],
+      "matchStrings": [
+        "(?s)argocd\\s*=\\s*\\{[^}]*?version\\s*=\\s*\"(?<currentValue>[^\"]+)\"\\s*\\n"
+      ],
+      "depNameTemplate": "argo-cd",
+      "registryUrlTemplate": "https://argoproj.github.io/argo-helm",
+      "datasourceTemplate": "helm"
+    }
+  ],
+  "repositories": [
+    "bbayrakt/terragrunt-hcloud-kubernetes"
+  ]
+}
