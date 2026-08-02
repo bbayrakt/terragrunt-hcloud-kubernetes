@@ -19,8 +19,10 @@ on:
     paths:
       - infra/environments/staging/**
       - infra/modules/**
+      - platform/**
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -51,7 +53,11 @@ jobs:
       - name: HCL Format Check
         run: terragrunt hcl format --check
 
-      - name: HCL Validate
+      # Scoped to staging: terragrunt hcl validate from the repo root also validates
+      # production, whose configs currently reference inputs/secrets that don't exist
+      # yet (pre-existing, out of scope — see docs/plans/2026-08-02-001-...-plan.md).
+      - name: HCL Validate (staging)
+        working-directory: infra/environments/staging
         run: terragrunt hcl validate
 
   validate:
